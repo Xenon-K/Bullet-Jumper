@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.8" tiledversion="1.8.6" orientation="orthogonal" renderorder="right-down" width="40" height="10" tilewidth="64" tileheight="64" infinite="0" nextlayerid="6" nextobjectid="14">
+ <tileset firstgid="1" source="floor.tsx"/>
+ <imagelayer id="2" name="sky" locked="1" offsetx="0" offsety="-178" parallaxx="0" parallaxy="0" repeatx="1">
+  <image source="../assets/backgrounds/sky.png" width="1920" height="1080"/>
+ </imagelayer>
+ <imagelayer id="3" name="mountains" locked="1" offsetx="0" offsety="-4" parallaxx="0.2" parallaxy="0.2" repeatx="1">
+  <image source="../assets/backgrounds/mountains.png" width="1920" height="1080"/>
+ </imagelayer>
+ <imagelayer id="4" name="foilage" locked="1" offsetx="-238" offsety="-122" parallaxx="0.5" parallaxy="0.5" repeatx="1">
+  <image source="../assets/backgrounds/brush.png" width="1920" height="1080"/>
+ </imagelayer>
+ <layer id="1" name="floor" width="40" height="10" locked="1">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,43,44,44,44,44,45,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,43,45,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,43,44,44,44,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,43,44,45,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,43,44,44,44,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,43,44,44,44,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+43,44,44,44,45,0,0,0,0,0,0,0,0,0,0,0,43,44,44,45,0,0,0,0,0,0,43,44,45,0,0,0,0,0,0,0,0,0,0,0
+</data>
+ </layer>
+ <objectgroup id="5" name="collisions" visible="0" locked="1">
+  <object id="4" x="320.75" y="384" width="318.75" height="63.75"/>
+  <object id="5" x="0.25" y="576.25" width="319.75" height="63.5"/>
+  <object id="7" x="640.75" y="511.75" width="319.75" height="64.25"/>
+  <object id="8" x="1024.75" y="576.5" width="255" height="64"/>
+  <object id="9" x="1344" y="447.333" width="319.667" height="64.3333"/>
+  <object id="10" x="1665" y="576" width="191" height="64"/>
+  <object id="11" x="1792.67" y="384" width="191.667" height="64.6667"/>
+  <object id="12" x="1600.33" y="192" width="127" height="64"/>
+  <object id="13" x="2048" y="64" width="384.667" height="64.6667"/>
+ </objectgroup>
+</map>
