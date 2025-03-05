@@ -155,12 +155,14 @@ void movePlayer(Player *player) {
       player->jumpTime += GetFrameTime(); // Track hold duration
       if (player->jumpTime < MAX_JUMP_HOLD) {
           player->vel.y = JUMP_BOOST;  // Apply more force for higher jump
+          changedState = true;
       }
   }
 
   // Stop boosting when SPACE is released
   if (IsKeyReleased(KEY_SPACE) && player->isJumping) {
       player->jumpTime = MAX_JUMP_HOLD;  // Prevent further boosting
+      changedState = true;
   }
 
   // Falling state if moving downward
