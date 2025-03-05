@@ -73,6 +73,16 @@ struct Enemy {
     std::vector<Animation> animations;
 };
 
+struct Projectile {
+    Rectangle bullet;
+    Vector2 vel;
+    Texture2D sprite;
+    Direction dir;
+    CurrentState state;
+    std::vector<Animation> animations;
+    bool isActivate;
+};
+
 void update_animation(Animation *self) {
     float dt = GetFrameTime();
     self->rem -= dt;
