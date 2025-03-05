@@ -29,7 +29,6 @@ enum CurrentState {
 };
 
 enum EnemyState{
-    DEAD = 0,
     MOVING = 1,
     IDLE = 2,
     ATTACKING = 3
@@ -69,8 +68,18 @@ struct Enemy {
     Vector2 vel;
     Texture2D sprite;
     Direction dir;
-    EnemyState state;
+    EnemyState e_state;
     std::vector<Animation> animations;
+};
+
+struct Projectile {
+    Rectangle bullet;
+    Vector2 vel;
+    Texture2D sprite;
+    Direction dir;
+    CurrentState state;
+    std::vector<Animation> animations;
+    bool isActivate;
 };
 
 void update_animation(Animation *self) {
@@ -160,15 +169,17 @@ void movePlayer(Player *player) {
       changedState = true;
   }
 
+  /*
   // Attack animation
   if (IsKeyDown(KEY_ENTER)) {
-      player->state = ATTACKING;
+      player->state = CurrentState::ATTACKING;
       changedState = true;
   }
+  */
 
   // Default to idle if no movement
   if (!changedState) {
-      player->state = IDLE;
+      player->state = CurrentState::IDLE;
   }
 }
 
@@ -269,7 +280,7 @@ int main() {
         .vel = {0.0f, 0.0f},
         .sprite = hero,
         .dir = RIGHT,
-        .state = IDLE,
+        .state = CurrentState::IDLE,
         .animations = {
             {0, 7, 0, 0, 16, 16, 0.1f, 0.1f, ONESHOT},
             {0, 5, 0, 1, 16, 16, 0.1f, 0.1f, REPEATING},
