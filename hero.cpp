@@ -2,9 +2,12 @@
 #include <vector>
 #include <format>
 #include <cmath>  // For std::isnan
+#include <cstdlib>  // For rand, srand
+#include <ctime>    // For time()
 #define RAYTMX_IMPLEMENTATION
 #include "raytmx.h"
 #include <string>
+#include <unordered_set>
 
 const int W = 600;
 const int H = 600;
@@ -28,11 +31,13 @@ enum CurrentState {
     ATTACKING = 6
 };
 
+/*
 enum EnemyState{
     MOVING = 1,
     IDLE = 2,
     ATTACKING = 3
 };
+*/
 
 enum AnimationType {
     REPEATING,
@@ -61,6 +66,14 @@ struct Player {
     bool isJumping;
     float jumpTime;
     int health;
+    float score;
+};
+
+struct Score_Orb {
+    Rectangle rect;
+    float score;
+    Color color;
+    bool collected;
 };
 
 struct Enemy {
@@ -68,7 +81,7 @@ struct Enemy {
     Vector2 vel;
     Texture2D sprite;
     Direction dir;
-    EnemyState e_state;
+    //EnemyState e_state;
     std::vector<Animation> animations;
 };
 
@@ -104,7 +117,6 @@ void update_animation(Animation *self) {
 Rectangle animation_frame(const Animation *self) {
     int x = (self->cur % (self->lst + 1)) * self->width;
     int y = self->offset * self->height;
-
     return (Rectangle){(float)x, (float)y, (float)self->width, (float)self->height};
 }
 
@@ -113,83 +125,143 @@ void drawPlayer(const Player *player) {
         TraceLog(LOG_ERROR, "Invalid animation state: %d", player->state);
         return;
     }
-
     Rectangle source = animation_frame(&(player->animations[player->state]));
     source.width = source.width * static_cast<float>(player->dir);
     DrawTexturePro(player->sprite, source, player->rect, {0, 0}, 0.0f, WHITE);
 }
 
 void movePlayer(Player *player) {
-  player->vel.x = 0.0f;
-  bool changedState = false;
+    player->vel.x = 0.0f;
+    bool changedState = false;
 
-  // Movement left/right
-  if (IsKeyDown(KEY_A)) {
-      player->vel.x = -200.0f;
-      player->dir = LEFT;
-      if (player->vel.y == 0.0f) {
-          player->state = RUNNING;
-          changedState = true;
-      }
-  } else if (IsKeyDown(KEY_D)) {
-      player->vel.x = 200.0f;
-      player->dir = RIGHT;
-      if (player->vel.y == 0.0f) {
-          player->state = RUNNING;
-          changedState = true;
-      }
-  }
+    // Movement left/right
+    if (IsKeyDown(KEY_A)) {
+        player->vel.x = -200.0f;
+        player->dir = LEFT;
+        if (player->vel.y == 0.0f) {
+            player->state = CurrentState::RUNNING;
+            changedState = true;
+        }
+    } else if (IsKeyDown(KEY_D)) {
+        player->vel.x = 200.0f;
+        player->dir = RIGHT;
+        if (player->vel.y == 0.0f) {
+            player->state = CurrentState::RUNNING;
+            changedState = true;
+        }
+    }
 
-  // Jump Logic
-  if (IsKeyPressed(KEY_SPACE) && !player->isJumping) {
-      player->jumpTime = 0.0f;  // Start tracking jump time
-      player->vel.y = JUMP_FORCE;
-      player->state = JUMPING;
-      player->isJumping = true;
-      changedState = true;
-  }
+    // Jump Logic
+    if (IsKeyPressed(KEY_SPACE) && !player->isJumping) {
+        player->jumpTime = 0.0f;  // Start tracking jump time
+        player->vel.y = JUMP_FORCE;
+        player->state = CurrentState::JUMPING;
+        player->isJumping = true;
+        changedState = true;
+    }
   
-  // Holding SPACE boosts jump height
-  if (IsKeyDown(KEY_SPACE) && player->isJumping) {
-      player->jumpTime += GetFrameTime(); // Track hold duration
-      if (player->jumpTime < MAX_JUMP_HOLD) {
-          player->vel.y = JUMP_BOOST;  // Apply more force for higher jump
-          changedState = true;
-      }
-  }
+    // Holding SPACE boosts jump height
+    if (IsKeyDown(KEY_SPACE) && player->isJumping) {
+        player->jumpTime += GetFrameTime(); // Track hold duration
+        if (player->jumpTime < MAX_JUMP_HOLD) {
+            player->vel.y = JUMP_BOOST;  // Apply more force for higher jump
+            changedState = true;
+        }
+    }
 
-  // Stop boosting when SPACE is released
-  if (IsKeyReleased(KEY_SPACE) && player->isJumping) {
-      player->jumpTime = MAX_JUMP_HOLD;  // Prevent further boosting
-      changedState = true;
-  }
+    // Stop boosting when SPACE is released
+    if (IsKeyReleased(KEY_SPACE) && player->isJumping) {
+        player->jumpTime = MAX_JUMP_HOLD;  // Prevent further boosting
+        changedState = true;
+    }
 
-  // Falling state if moving downward
-  if (player->vel.y > 0) {
-      player->state = FALLING;
-      player->isJumping = true;
-      changedState = true;
-  }
+    // Falling state if moving downward
+    if (player->vel.y > 0) {
+        player->state = CurrentState::FALLING;
+        player->isJumping = true;
+        changedState = true;
+    }
 
-  /*
-  // Attack animation
-  if (IsKeyDown(KEY_ENTER)) {
-      player->state = CurrentState::ATTACKING;
-      changedState = true;
-  }
-  */
+    // Default to idle if no movement
+    if (!changedState) {
+        player->state = CurrentState::IDLE;
+    }
+}
 
-  // Default to idle if no movement
-  if (!changedState) {
-      player->state = CurrentState::IDLE;
-  }
+
+Color getOrbColor(float score) {
+    float t = (score - 1) / 499.0f;  // t in [0, 1]
+    int r = (int)(t * 255);
+    int g = 0;
+    int b = (int)((1 - t) * 255);
+    return Color{ (unsigned char)r, (unsigned char)g, (unsigned char)b, 255 };
+}
+
+void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs) {
+    float viewX = camera.target.x - (W / 2.0f) / camera.zoom;
+    float viewY = camera.target.y - (H / 2.0f) / camera.zoom;
+    float viewW = W / camera.zoom;
+    float viewH = H / camera.zoom;
+    Rectangle viewRect = { viewX, viewY, viewW, viewH };
+
+    static std::unordered_set<TmxObject*> spawnedPlatforms;
+
+    for (unsigned int i = 0; i < map->layersLength; i++) {
+        if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
+            TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
+            for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
+                TmxObject &col = objectGroup.objects[j];
+                Rectangle platform = { col.aabb.x, col.aabb.y, col.aabb.width, col.aabb.height };
+
+                if (CheckCollisionRecs(platform, viewRect)) {
+                    if (spawnedPlatforms.find(&col) == spawnedPlatforms.end()) {
+                        int orbSize = 16;
+                        float orbX = platform.x;
+                        if (platform.width > orbSize) {
+                            orbX += (rand() % (int)(platform.width - orbSize));
+                        }
+                        float orbY = platform.y - orbSize;
+                        float orbScore = (rand() % 500) + 1;
+                        Color orbColor = getOrbColor(orbScore);
+                        Score_Orb newOrb = {
+                            { orbX, orbY, (float)orbSize, (float)orbSize },
+                            orbScore,
+                            orbColor,
+                            false
+                        };
+                        orbs.push_back(newOrb);
+                        spawnedPlatforms.insert(&col);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void checkOrbCollection(Player *player, std::vector<Score_Orb> &orbs) {
+    for (auto it = orbs.begin(); it != orbs.end();) {
+        if (CheckCollisionRecs(player->rect, it->rect)) {
+            player->score += it->score;
+            // Optionally, you could play a sound or animation here.
+            it = orbs.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void drawOrbs(const std::vector<Score_Orb> &orbs) {
+    for (const auto &orb : orbs) {
+        // Draw a filled circle at the center of the orb rectangle.
+        DrawCircle((int)(orb.rect.x + orb.rect.width / 2), (int)(orb.rect.y + orb.rect.height / 2), (int)(orb.rect.width / 2), orb.color);
+    }
 }
 
 void applyGravity(Vector2 *vel) {
-  vel->y += 1000.0f * GetFrameTime();  // Increase gravity effect
-  if (vel->y > MAX_GRAV) {
-      vel->y = MAX_GRAV;  // Cap fall speed
-  }
+    vel->y += 1000.0f * GetFrameTime();  // Increase gravity effect
+    if (vel->y > MAX_GRAV) {
+        vel->y = MAX_GRAV;  // Cap fall speed
+    }
 }
 
 void moveRectByVel(Rectangle *rect, const Vector2 *vel) {
@@ -206,54 +278,60 @@ void keepPlayerInScreen(Player *player) {
 }
 
 void checkTileCollisions(TmxMap *map, Player *player) {
-  for (unsigned int i = 0; i < map->layersLength; i++) {
-      if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
-          TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
-          for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
-              TmxObject &col = objectGroup.objects[j];
-              Rectangle platform = {col.aabb.x, col.aabb.y, col.aabb.width, col.aabb.height};
+    for (unsigned int i = 0; i < map->layersLength; i++) {
+        if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
+            TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
+            for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
+                TmxObject &col = objectGroup.objects[j];
+                Rectangle platform = { col.aabb.x, col.aabb.y, col.aabb.width, col.aabb.height };
 
-              if (CheckCollisionRecs(player->rect, platform)) {
-                  TraceLog(LOG_DEBUG, "Collision detected!");
+                if (CheckCollisionRecs(player->rect, platform)) {
+                    TraceLog(LOG_DEBUG, "Collision detected!");
 
-                  // Compute previous position
-                  float previousX = player->rect.x - player->vel.x * GetFrameTime();
-                  float previousY = player->rect.y - player->vel.y * GetFrameTime();
+                    // Compute previous position
+                    float previousX = player->rect.x - player->vel.x * GetFrameTime();
+                    float previousY = player->rect.y - player->vel.y * GetFrameTime();
 
-                  // Determine collision direction
-                  bool comingFromTop = previousY + player->rect.height <= platform.y;
-                  bool comingFromBottom = previousY >= platform.y + platform.height;
-                  bool comingFromLeft = previousX + player->rect.width <= platform.x;
-                  bool comingFromRight = previousX >= platform.x + platform.width;
+                    // Determine collision direction
+                    bool comingFromTop = previousY + player->rect.height <= platform.y;
+                    bool comingFromBottom = previousY >= platform.y + platform.height;
+                    bool comingFromLeft = previousX + player->rect.width <= platform.x;
+                    bool comingFromRight = previousX >= platform.x + platform.width;
 
-                  if (comingFromTop) {
-                      // Standing on platform
-                      player->vel.y = 0.0f;
-                      player->rect.y = platform.y - player->rect.height;
-                      player->isJumping = false; // Allow jumping again
-                  } else if (comingFromBottom) {
-                      // Hitting the bottom of the platform
-                      player->vel.y = 0.0f;
-                      player->rect.y = platform.y + platform.height;
-                  } else if (comingFromLeft) {
-                      // Hitting the left side
-                      player->vel.x = 0.0f;
-                      player->rect.x = platform.x - player->rect.width;
-                  } else if (comingFromRight) {
-                      // Hitting the right side
-                      player->vel.x = 0.0f;
-                      player->rect.x = platform.x + platform.width;
-                  }
-              }
-          }
-      }
-  }
+                    if (comingFromTop) {
+                        // Standing on platform
+                        player->vel.y = 0.0f;
+                        player->rect.y = platform.y - player->rect.height;
+                        player->isJumping = false; // Allow jumping again
+                    } else if (comingFromBottom) {
+                        // Hitting the bottom of the platform
+                        player->vel.y = 0.0f;
+                        player->rect.y = platform.y + platform.height;
+                    } else if (comingFromLeft) {
+                        // Hitting the left side
+                        player->vel.x = 0.0f;
+                        player->rect.x = platform.x - player->rect.width;
+                    } else if (comingFromRight) {
+                        // Hitting the right side
+                        player->vel.x = 0.0f;
+                        player->rect.x = platform.x + platform.width;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void drawHealth(int health) {
-  // Draw health in the bottom-left corner
-  std::string healthText = "HP: " + std::to_string(health);
-  DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
+    // Draw health in the bottom-left corner
+    std::string healthText = "HP: " + std::to_string(health);
+    DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
+}
+
+void drawScore(float score) {
+    // Draw score under health
+    std::string scoreText = "Score: " + std::to_string(score);
+    DrawText(scoreText.c_str(), 10, H - 40, 20, WHITE);
 }
 
 void cameraFollow(Camera2D *camera, const Player *player) {
@@ -261,12 +339,14 @@ void cameraFollow(Camera2D *camera, const Player *player) {
         TraceLog(LOG_ERROR, "Player position is NaN! Resetting...");
         return;
     }
-
     camera->target = (Vector2){player->rect.x, player->rect.y};
 }
 
 int main() {
     InitWindow(W, H, "Hero Animation Example");
+
+    // Seed the random generator for orb spawning.
+    srand((unsigned)time(NULL));
 
     const char* tmx = "map.tmx";
     TmxMap* map = LoadTMX(tmx);
@@ -282,7 +362,7 @@ int main() {
         .vel = {0.0f, 0.0f},
         .sprite = hero,
         .dir = RIGHT,
-        .state = CurrentState::IDLE,
+        .state = IDLE,
         .animations = {
             {0, 7, 0, 0, 16, 16, 0.1f, 0.1f, ONESHOT},
             {0, 5, 0, 1, 16, 16, 0.1f, 0.1f, REPEATING},
@@ -292,7 +372,10 @@ int main() {
             {0, 2, 0, 6, 16, 16, 0.1f, 0.1f, REPEATING},
             {0, 3, 0, 6, 32, 16, 0.15f, 0.15f, ONESHOT},
         },
+        .isJumping = false,
+        .jumpTime = 0.0f,
         .health = 10,
+        .score = 0.0f,
     };
 
     Camera2D camera = {
@@ -301,6 +384,8 @@ int main() {
         .rotation = 0.0f,
         .zoom = 1.0f,
     };
+
+    std::vector<Score_Orb> orbs;
 
     while (!WindowShouldClose()) {
         AnimateTMX(map);
@@ -311,13 +396,17 @@ int main() {
         keepPlayerInScreen(&player);
         update_animation(&(player.animations[player.state]));
         cameraFollow(&camera, &player);
+        spawnOrb(map, camera, orbs);
+        checkOrbCollection(&player, orbs);
 
         BeginDrawing();
         ClearBackground(SKYBLUE);
         BeginMode2D(camera);
         DrawTMX(map, &camera, 0, 0, WHITE);
         drawPlayer(&player);
+        drawOrbs(orbs);
         EndMode2D();
+        drawScore(player.score);
         drawHealth(player.health);
         DrawFPS(5, 5);
         EndDrawing();
