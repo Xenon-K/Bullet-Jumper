@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.8" tiledversion="1.8.6" orientation="orthogonal" renderorder="right-down" width="40" height="10" tilewidth="64" tileheight="64" infinite="0" nextlayerid="6" nextobjectid="14">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="40" height="10" tilewidth="64" tileheight="64" infinite="0" nextlayerid="6" nextobjectid="14">
  <tileset firstgid="1" source="floor.tsx"/>
  <imagelayer id="2" name="sky" locked="1" offsetx="0" offsety="-178" parallaxx="0" parallaxy="0" repeatx="1">
-  <image source="../assets/backgrounds/sky.png" width="1920" height="1080"/>
+  <image source="assets/backgrounds/sky.png" width="1920" height="1080"/>
  </imagelayer>
- <imagelayer id="3" name="mountains" locked="1" offsetx="0" offsety="-4" parallaxx="0.2" parallaxy="0.2" repeatx="1">
-  <image source="../assets/backgrounds/mountains.png" width="1920" height="1080"/>
+ <imagelayer id="3" name="mountains" offsetx="0" offsety="-4" parallaxx="0.2" parallaxy="0.2" repeatx="1">
+  <image source="assets/backgrounds/mountains.png" width="1920" height="1080"/>
  </imagelayer>
  <imagelayer id="4" name="foilage" locked="1" offsetx="-238" offsety="-122" parallaxx="0.5" parallaxy="0.5" repeatx="1">
-  <image source="../assets/backgrounds/brush.png" width="1920" height="1080"/>
+  <image source="assets/backgrounds/brush.png" width="1920" height="1080"/>
  </imagelayer>
  <layer id="1" name="floor" width="40" height="10" locked="1">
   <data encoding="csv">

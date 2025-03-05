@@ -4,6 +4,7 @@
 #include <cmath>  // For std::isnan
 #define RAYTMX_IMPLEMENTATION
 #include "raytmx.h"
+#include <string>
 
 const int W = 600;
 const int H = 600;
@@ -25,6 +26,13 @@ enum CurrentState {
     JUMPING = 4,
     FALLING = 5,
     ATTACKING = 6
+};
+
+enum EnemyState{
+    DEAD = 0,
+    MOVING = 1,
+    IDLE = 2,
+    ATTACKING = 3
 };
 
 enum AnimationType {
@@ -54,6 +62,15 @@ struct Player {
     bool isJumping;
     float jumpTime;
     int health;
+};
+
+struct Enemy {
+    Rectangle rect;
+    Vector2 vel;
+    Texture2D sprite;
+    Direction dir;
+    EnemyState state;
+    std::vector<Animation> animations;
 };
 
 void update_animation(Animation *self) {
@@ -238,7 +255,7 @@ void cameraFollow(Camera2D *camera, const Player *player) {
 int main() {
     InitWindow(W, H, "Hero Animation Example");
 
-    const char* tmx = "resources/map.tmx";
+    const char* tmx = "map.tmx";
     TmxMap* map = LoadTMX(tmx);
     if (map == nullptr) {
         TraceLog(LOG_ERROR, "Couldn't load the map: %s", tmx);
