@@ -25,13 +25,12 @@ enum CurrentState {
     ROLLING = 3,
     JUMPING = 4,
     FALLING = 5,
-    ATTACKING = 6
 };
 
 enum EnemyState{
-    MOVING = 1,
-    IDLE = 2,
-    ATTACKING = 3
+    E_MOVING = 1,
+    E_STILL = 2,
+    E_ATTACKING = 3
 };
 
 enum AnimationType {
@@ -248,6 +247,65 @@ void checkTileCollisions(TmxMap *map, Player *player) {
           }
       }
   }
+}
+
+// Draw enemy
+void drawEnemy(const Enemy *enemy) {
+    if (enemy->e_state < 0 || enemy->e_state >= static_cast<int>(enemy->animations.size())) {
+        TraceLog(LOG_ERROR, "Invalid animation state: %d", enemy->e_state);
+        return;
+    }
+
+    Rectangle source = animation_frame(&(enemy->animations[enemy->e_state]));
+    source.width = source.width * static_cast<float>(enemy->dir);
+    DrawTexturePro(enemy->sprite, source, enemy->rect, {0, 0}, 0.0f, WHITE);
+}
+
+// Spawn Enemy either on the left or right side of the screen to which they will move to the opposite side
+void spawnEnemy(Enemy *enemy) {
+    int side = GetRandomValue(0, 1);
+    if (side == 0) {
+        enemy->rect.x = 0;
+        enemy->dir = RIGHT;
+    } else {
+        enemy->rect.x = W - enemy->rect.width;
+        enemy->dir = LEFT;
+    }
+    enemy->rect.y = GetRandomValue(0, H - enemy->rect.height);
+    enemy->e_state = EnemyState::E_MOVING;
+}
+
+// Move enemy
+void moveEnemy(Enemy *enemy) {
+    if (enemy->e_state == EnemyState::E_MOVING) {
+        enemy->vel.x = 100.0f * enemy->dir;
+    } else {
+        enemy->vel.x = 0.0f;
+    }
+    moveRectByVel(&(enemy->rect), &(enemy->vel));
+}
+
+// Enemy Shoot at random intervals towards the player
+void enemyShoot(Projectile *bullet, const Enemy *enemy, Player *player) {
+    if (bullet->isActivate) {
+        bullet->vel.x = 200.0f * bullet->dir;
+        moveRectByVel(&(bullet->bullet), &(bullet->vel));
+    } else {
+        bullet->bullet.x = enemy->rect.x;
+        bullet->bullet.y = enemy->rect.y;
+        bullet->isActivate = true;
+        bullet->dir = (player->rect.x < enemy->rect.x) ? LEFT : RIGHT;
+    }
+    // bullets should despawn when they go off screen
+    if (bullet->bullet.x < 0 || bullet->bullet.x > W) {
+        bullet->isActivate = false;
+    }
+
+    // If an enemy touches the player then the players will lose half health
+    if (CheckCollisionRecs(player->rect, bullet->bullet)) {
+        player->health = player->health/2;
+        bullet->isActivate = false;
+    }
 }
 
 void drawHealth(int health) {
