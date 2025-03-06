@@ -9,8 +9,8 @@
 #include <string>
 #include <unordered_set>
 
-const int W = 600;
-const int H = 600;
+const int W = 720;
+const int H = 1280;
 const float MAX_GRAV = 300.0f;
 const float JUMP_FORCE = -250.0f;
 const float MAX_JUMP_HOLD = 0.5f;
@@ -66,12 +66,12 @@ struct Player {
     bool isJumping;
     float jumpTime;
     int health;
-    float score;
+    int score;
 };
 
 struct Score_Orb {
     Rectangle rect;
-    float score;
+    float score = 1;
     Color color;
     bool collected;
 };
@@ -186,6 +186,8 @@ void movePlayer(Player *player) {
     if (!changedState) {
         player->state = CurrentState::IDLE;
     }
+
+    
 }
 
 
@@ -241,7 +243,7 @@ void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs)
 void checkOrbCollection(Player *player, std::vector<Score_Orb> &orbs) {
     for (auto it = orbs.begin(); it != orbs.end();) {
         if (CheckCollisionRecs(player->rect, it->rect)) {
-            player->score += it->score;
+            player->score += 1;
             // Optionally, you could play a sound or animation here.
             it = orbs.erase(it);
         } else {
@@ -276,6 +278,9 @@ void keepPlayerInScreen(Player *player) {
         player->isJumping = false; // Allow jumping again
     }
 }
+
+
+
 
 void checkTileCollisions(TmxMap *map, Player *player) {
     for (unsigned int i = 0; i < map->layersLength; i++) {
@@ -328,23 +333,48 @@ void drawHealth(int health) {
     DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
 }
 
-void drawScore(float score) {
+void drawScore(int score) {
     // Draw score under health
     std::string scoreText = "Score: " + std::to_string(score);
-    DrawText(scoreText.c_str(), 10, H - 40, 20, WHITE);
+    DrawText(scoreText.c_str(), 10, H - 60, 20, WHITE);
 }
 
+
 void cameraFollow(Camera2D *camera, const Player *player) {
+    static bool initialized = false;
+    static float highestCameraY = 0.0f; // Store the highest Y position
+
     if (std::isnan(player->rect.x) || std::isnan(player->rect.y)) {
         TraceLog(LOG_ERROR, "Player position is NaN! Resetting...");
         return;
     }
-    camera->target = (Vector2){player->rect.x, player->rect.y};
+
+    // Initialize the highestCameraY to the player's initial position
+    if (!initialized) {
+        highestCameraY = player->rect.y;
+        initialized = true;
+    }
+
+    // Update the highestCameraY only if the player moves higher
+    if (player->rect.y < highestCameraY) {
+        highestCameraY = player->rect.y;
+    }
+
+    camera->target.x = player->rect.x; // Always follow player in X
+    camera->target.y = highestCameraY; // Keep camera at the highest Y position
 }
+void checkKillboxCollision(Player* player, const Rectangle& killbox) {
+    if (CheckCollisionRecs(player->rect, killbox)) {
+        player->health = 0;  // Set health to zero (player dies)
+        player->state = CurrentState::DEAD;
+        TraceLog(LOG_ERROR, "Player fell into the killbox!");
+    }
+}
+
 
 int main() {
     InitWindow(W, H, "Hero Animation Example");
-
+    SetTargetFPS(60);
     // Seed the random generator for orb spawning.
     srand((unsigned)time(NULL));
 
@@ -358,7 +388,7 @@ int main() {
     Texture2D hero = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png");
 
     Player player = {
-        .rect = {16, 500, 64.0f, 64.0f},
+        .rect = {0, 1700, 64.0f, 64.0f},
         .vel = {0.0f, 0.0f},
         .sprite = hero,
         .dir = RIGHT,
@@ -375,7 +405,7 @@ int main() {
         .isJumping = false,
         .jumpTime = 0.0f,
         .health = 10,
-        .score = 0.0f,
+        .score = 0,
     };
 
     Camera2D camera = {
@@ -384,6 +414,7 @@ int main() {
         .rotation = 0.0f,
         .zoom = 1.0f,
     };
+    Rectangle killbox = {0, 0, (float)W, 40}; // Width matches screen, height can be adjusted
 
     std::vector<Score_Orb> orbs;
 
@@ -393,21 +424,27 @@ int main() {
         applyGravity(&(player.vel));
         moveRectByVel(&(player.rect), &(player.vel));
         checkTileCollisions(map, &player);
-        keepPlayerInScreen(&player);
+        //keepPlayerInScreen(&player);
         update_animation(&(player.animations[player.state]));
         cameraFollow(&camera, &player);
         spawnOrb(map, camera, orbs);
         checkOrbCollection(&player, orbs);
 
+        killbox.y = camera.target.y + (H / 2.0f) / camera.zoom;
+        checkKillboxCollision(&player, killbox);
+
         BeginDrawing();
         ClearBackground(SKYBLUE);
         BeginMode2D(camera);
+        
         DrawTMX(map, &camera, 0, 0, WHITE);
+        DrawRectangleRec(killbox, RED);
         drawPlayer(&player);
         drawOrbs(orbs);
         EndMode2D();
         drawScore(player.score);
         drawHealth(player.health);
+        
         DrawFPS(5, 5);
         EndDrawing();
     }
