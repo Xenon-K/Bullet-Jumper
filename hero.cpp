@@ -9,6 +9,15 @@
 #include <string>
 #include <unordered_set>
 
+// Sound effect and music variables
+Music menuMusic;
+Sound jumpSound;
+Sound collectSound;
+Sound deathSound;
+Sound menuSelectSound;
+Sound gameStartSound;
+Sound landSound;
+
 const int W = 720;
 const int H = 1280;
 const float MAX_GRAV = 300.0f;
@@ -189,6 +198,9 @@ void movePlayer(Player *player) {
         player->state = CurrentState::JUMPING;
         player->isJumping = true;
         changedState = true;
+        
+        // Play jump sound
+        PlaySound(jumpSound);
     }
   
     // Holding SPACE boosts jump height
@@ -272,7 +284,8 @@ void checkOrbCollection(Player *player, std::vector<Score_Orb> &orbs) {
     for (auto it = orbs.begin(); it != orbs.end();) {
         if (CheckCollisionRecs(player->rect, it->rect)) {
             player->score += 1;
-            // Optionally, you could play a sound or animation here.
+            // Play collect sound
+            PlaySound(collectSound);
             it = orbs.erase(it);
         } else {
             ++it;
@@ -308,6 +321,8 @@ void keepPlayerInScreen(Player *player) {
 }
 
 void checkTileCollisions(TmxMap *map, Player *player) {
+    bool wasJumping = player->isJumping;
+    
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
             TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
@@ -333,6 +348,11 @@ void checkTileCollisions(TmxMap *map, Player *player) {
                         player->vel.y = 0.0f;
                         player->rect.y = platform.y - player->rect.height;
                         player->isJumping = false; // Allow jumping again
+                        
+                        // Play landing sound if player was jumping before
+                        if (wasJumping) {
+                            PlaySound(landSound);
+                        }
                     } else if (comingFromBottom) {
                         // Hitting the bottom of the platform
                         player->vel.y = 0.0f;
@@ -425,6 +445,8 @@ void checkKillboxCollision(Player* player, const Rectangle& killbox, DeathTransi
             transition->active = true;
             transition->alpha = 0.0f;
             transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
             TraceLog(LOG_INFO, "Player fell off the map!");
         }
         
@@ -435,6 +457,8 @@ void checkKillboxCollision(Player* player, const Rectangle& killbox, DeathTransi
             transition->active = true;
             transition->alpha = 0.0f;
             transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
             TraceLog(LOG_INFO, "Player touched the killbox!");
         }
     }
@@ -460,6 +484,8 @@ void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* tra
             transition->active = true;
             transition->alpha = 0.0f;
             transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
             TraceLog(LOG_INFO, "Player went outside horizontal map boundaries!");
         }
     }
@@ -633,9 +659,74 @@ void ResetCamera(Camera2D* camera, const Player* player) {
     camera->zoom = 1.0f;
 }
 
+// Load all game sounds
+void LoadGameSounds() {
+    // Load sound effects
+    jumpSound = LoadSound("assets/sfx/player-jump.wav");
+    TraceLog(LOG_INFO, "Loaded jump sound");
+    SetSoundVolume(jumpSound, 1.0f); // Full volume
+    
+    collectSound = LoadSound("assets/sfx/got-coin.wav");
+    TraceLog(LOG_INFO, "Loaded collect sound");
+    SetSoundVolume(collectSound, 1.0f); // Full volume
+    
+    deathSound = LoadSound("assets/sfx/player-lost.wav");
+    TraceLog(LOG_INFO, "Loaded death sound");
+    SetSoundVolume(deathSound, 1.0f); // Full volume
+    
+    menuSelectSound = LoadSound("assets/sfx/menu-select.wav");
+    TraceLog(LOG_INFO, "Loaded menu select sound");
+    SetSoundVolume(menuSelectSound, 1.0f); // Full volume
+    
+    // Use a different sound for game start
+    gameStartSound = LoadSound("assets/sfx/menu-select.wav");
+    TraceLog(LOG_INFO, "Loaded game start sound");
+    SetSoundVolume(gameStartSound, 1.0f); // Full volume
+    
+    landSound = LoadSound("assets/sfx/land.wav");
+    TraceLog(LOG_INFO, "Loaded land sound");
+    SetSoundVolume(landSound, 1.0f); // Full volume
+    
+    // Load music
+    menuMusic = LoadMusicStream("assets/sfx/level-music.wav");
+    TraceLog(LOG_INFO, "Loaded menu music");
+    SetMusicVolume(menuMusic, 0.7f); // Set volume to 70%
+}
+
+// Unload all game sounds
+void UnloadGameSounds() {
+    // Unload sound effects
+    UnloadSound(jumpSound);
+    UnloadSound(collectSound);
+    UnloadSound(deathSound);
+    UnloadSound(menuSelectSound);
+    UnloadSound(gameStartSound);
+    UnloadSound(landSound);
+    
+    // Unload music
+    UnloadMusicStream(menuMusic);
+}
+
 int main() {
     InitWindow(W, H, "Bullet Jumper");
     SetTargetFPS(60);
+    
+    // Initialize audio device
+    InitAudioDevice();
+    
+    // Check if audio device is initialized
+    if (IsAudioDeviceReady()) {
+        TraceLog(LOG_INFO, "Audio device initialized successfully");
+    } else {
+        TraceLog(LOG_ERROR, "Failed to initialize audio device");
+    }
+    
+    // Load all game sounds
+    LoadGameSounds();
+    
+    // Start playing menu music
+    PlayMusicStream(menuMusic);
+    
     // Seed the random generator for orb spawning.
     srand((unsigned)time(NULL));
 
@@ -696,6 +787,9 @@ int main() {
         // Handle game state logic
         switch(gameState) {
             case MENU:
+                // Update menu music
+                UpdateMusicStream(menuMusic);
+                
                 // Reset death transition when entering menu
                 deathTransition.active = false;
                 
@@ -710,6 +804,8 @@ int main() {
                 // Handle menu selection
                 if (menuSelection == 1 && IsKeyPressed(KEY_RIGHT)) {
                     difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 1) % 3);
+                    // Play menu selection sound
+                    PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
                         case EASY: mapFile = "map.tmx"; break;
@@ -719,6 +815,8 @@ int main() {
                 }
                 if (menuSelection == 1 && IsKeyPressed(KEY_LEFT)) {
                     difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 2) % 3);
+                    // Play menu selection sound
+                    PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
                         case EASY: mapFile = "map.tmx"; break;
@@ -727,8 +825,19 @@ int main() {
                     }
                 }
                 
+                // Menu navigation
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_UP)) {
+                    PlaySound(menuSelectSound);
+                }
+                
                 // Start game
                 if (IsKeyPressed(KEY_ENTER) && menuSelection == 0) {
+                    // Play game start sound
+                    PlaySound(gameStartSound);
+                    
+                    // Stop menu music
+                    StopMusicStream(menuMusic);
+                    
                     // Load the map based on difficulty
                     if (map != nullptr) {
                         UnloadTMX(map);
@@ -788,6 +897,8 @@ int main() {
                         deathTransition.active = true;
                         deathTransition.alpha = 0.0f;
                         deathTransition.timer = 0.0f;
+                        // Play death sound
+                        PlaySound(deathSound);
                         TraceLog(LOG_INFO, "Player fell too far below the screen!");
                     }
                 } else {
@@ -802,6 +913,9 @@ int main() {
                 
                 // Handle game over inputs
                 if (IsKeyPressed(KEY_ENTER)) {
+                    // Play game start sound
+                    PlaySound(gameStartSound);
+                    
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
                     // Reset camera follow system
@@ -813,6 +927,12 @@ int main() {
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
+                    // Play menu select sound
+                    PlaySound(menuSelectSound);
+                    
+                    // Start playing menu music again
+                    PlayMusicStream(menuMusic);
+                    
                     // Return to menu
                     gameState = MENU;
                 }
@@ -866,6 +986,13 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
+
+    // Unload all game sounds
+    UnloadGameSounds();
+
+    // Close audio device
+    CloseAudioDevice();
+
     CloseWindow();
     return 0;
 }
