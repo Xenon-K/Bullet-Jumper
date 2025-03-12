@@ -16,6 +16,20 @@ const float JUMP_FORCE = -250.0f;
 const float MAX_JUMP_HOLD = 0.5f;
 const float JUMP_BOOST = -350.0f;
 
+// Game states
+enum GameState {
+    MENU,
+    GAMEPLAY,
+    GAME_OVER
+};
+
+// Difficulty levels
+enum Difficulty {
+    EASY,
+    NORMAL,
+    HARD
+};
+
 enum Direction {
     LEFT = -1,
     RIGHT = 1,
@@ -104,10 +118,6 @@ struct Spike {
 };
 std::vector<Spike> spikes;
 
-
-
-
-
 void update_animation(Animation *self) {
     float dt = GetFrameTime();
     self->rem -= dt;
@@ -126,9 +136,6 @@ void update_animation(Animation *self) {
         }
     }
 }
-
-
-
 
 Rectangle animation_frame(const Animation *self) {
     int x = (self->cur % (self->lst + 1)) * self->width;
@@ -202,10 +209,7 @@ void movePlayer(Player *player) {
     if (!changedState) {
         player->state = CurrentState::IDLE;
     }
-
-    
 }
-
 
 Color getOrbColor(float score) {
     float t = (score - 1) / 499.0f;  // t in [0, 1]
@@ -295,9 +299,6 @@ void keepPlayerInScreen(Player *player) {
     }
 }
 
-
-
-
 void checkTileCollisions(TmxMap *map, Player *player) {
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
@@ -355,7 +356,6 @@ void drawScore(int score) {
     DrawText(scoreText.c_str(), 10, H - 60, 20, WHITE);
 }
 
-
 void cameraFollow(Camera2D *camera, const Player *player) {
     static bool initialized = false;
     static float highestCameraY = 0.0f; // Store the highest Y position
@@ -379,11 +379,11 @@ void cameraFollow(Camera2D *camera, const Player *player) {
     camera->target.x = player->rect.x; // Always follow player in X
     camera->target.y = highestCameraY; // Keep camera at the highest Y position
 }
+
 void checkKillboxCollision(Player* player, const Rectangle& killbox) {
     if (CheckCollisionRecs(player->rect, killbox)) {
-        player->health = 0;  // Set health to zero (player dies)
-        player->state = CurrentState::DEAD;
-        TraceLog(LOG_ERROR, "Player fell into the killbox!");
+        player->health = 0;
+        player->state = DEAD;
     }
 }
 
@@ -448,20 +448,94 @@ void DrawSpikes() {
     }
 }
 
+// Draw the main menu
+void DrawMainMenu(int selectedOption, Difficulty difficulty) {
+    const int titleFontSize = 60;
+    const int menuFontSize = 30;
+    const int optionSpacing = 60;
+    
+    // Draw title
+    const char* title = "BULLET JUMPER";
+    int titleWidth = MeasureText(title, titleFontSize);
+    DrawText(title, W/2 - titleWidth/2, H/4, titleFontSize, GOLD);
+    
+    // Draw menu options
+    const char* startText = "START GAME";
+    int startWidth = MeasureText(startText, menuFontSize);
+    DrawText(startText, W/2 - startWidth/2, H/2, menuFontSize, 
+             selectedOption == 0 ? RED : WHITE);
+    
+    // Draw difficulty option
+    const char* difficultyText;
+    switch(difficulty) {
+        case EASY: difficultyText = "DIFFICULTY: EASY"; break;
+        case NORMAL: difficultyText = "DIFFICULTY: NORMAL"; break;
+        case HARD: difficultyText = "DIFFICULTY: HARD"; break;
+        default: difficultyText = "DIFFICULTY: NORMAL";
+    }
+    
+    int diffWidth = MeasureText(difficultyText, menuFontSize);
+    DrawText(difficultyText, W/2 - diffWidth/2, H/2 + optionSpacing, menuFontSize, 
+             selectedOption == 1 ? RED : WHITE);
+    
+    // Draw instructions
+    const char* instructions = "UP/DOWN: Select Option | ENTER: Confirm | ESC: Quit";
+    int instrWidth = MeasureText(instructions, 20);
+    DrawText(instructions, W/2 - instrWidth/2, H - 100, 20, LIGHTGRAY);
+}
+
+// Draw the game over screen
+void DrawGameOver(int score) {
+    const int titleFontSize = 60;
+    const int textFontSize = 30;
+    
+    // Draw game over text
+    const char* gameOverText = "GAME OVER";
+    int gameOverWidth = MeasureText(gameOverText, titleFontSize);
+    DrawText(gameOverText, W/2 - gameOverWidth/2, H/3, titleFontSize, RED);
+    
+    // Draw score
+    char scoreText[50];
+    sprintf(scoreText, "FINAL SCORE: %d", score);
+    int scoreWidth = MeasureText(scoreText, textFontSize);
+    DrawText(scoreText, W/2 - scoreWidth/2, H/2, textFontSize, WHITE);
+    
+    // Draw restart instructions
+    const char* restartText = "PRESS ENTER TO RESTART";
+    int restartWidth = MeasureText(restartText, textFontSize);
+    DrawText(restartText, W/2 - restartWidth/2, H/2 + 100, textFontSize, YELLOW);
+    
+    const char* menuText = "PRESS M FOR MENU";
+    int menuWidth = MeasureText(menuText, textFontSize);
+    DrawText(menuText, W/2 - menuWidth/2, H/2 + 150, textFontSize, YELLOW);
+}
+
+// Reset player for a new game
+void ResetPlayer(Player* player, const char* mapFile) {
+    player->rect = {0, 1700, 64.0f, 64.0f};
+    player->vel = {0.0f, 0.0f};
+    player->dir = RIGHT;
+    player->state = IDLE;
+    player->isJumping = false;
+    player->jumpTime = 0.0f;
+    player->health = 10;
+    player->score = 0;
+}
 
 int main() {
-    InitWindow(W, H, "Hero Animation Example");
+    InitWindow(W, H, "Bullet Jumper");
     SetTargetFPS(60);
     // Seed the random generator for orb spawning.
     srand((unsigned)time(NULL));
 
-    const char* tmx = "hard.tmx";
-    TmxMap* map = LoadTMX(tmx);
-    if (map == nullptr) {
-        TraceLog(LOG_ERROR, "Couldn't load the map: %s", tmx);
-        return EXIT_FAILURE;
-    }
-
+    // Initialize game state
+    GameState gameState = MENU;
+    Difficulty difficulty = NORMAL;
+    int menuSelection = 0;
+    const char* mapFile = "map.tmx"; // Default map (normal difficulty)
+    
+    TmxMap* map = nullptr;
+    
     Texture2D hero = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png");
 
     Player player = {
@@ -497,44 +571,132 @@ int main() {
     static bool spikesLoaded = false;
     
     while (!WindowShouldClose()) {
-        AnimateTMX(map);
-        movePlayer(&player);
-        applyGravity(&(player.vel));
-        moveRectByVel(&(player.rect), &(player.vel));
-        checkTileCollisions(map, &player);
-        //keepPlayerInScreen(&player);
-        update_animation(&(player.animations[player.state]));
-        cameraFollow(&camera, &player);
-        spawnOrb(map, camera, orbs);
-        checkOrbCollection(&player, orbs);
+        // Handle game state logic
+        switch(gameState) {
+            case MENU:
+                // Menu navigation
+                if (IsKeyPressed(KEY_DOWN)) {
+                    menuSelection = (menuSelection + 1) % 2; // Cycle through menu options
+                }
+                if (IsKeyPressed(KEY_UP)) {
+                    menuSelection = (menuSelection - 1 + 2) % 2; // Cycle through menu options
+                }
+                
+                // Handle menu selection
+                if (menuSelection == 1 && IsKeyPressed(KEY_RIGHT)) {
+                    difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 1) % 3);
+                    // Update map file based on difficulty
+                    switch(difficulty) {
+                        case EASY: mapFile = "map.tmx"; break;
+                        case NORMAL: mapFile = "map.tmx"; break; // You can create a medium difficulty map
+                        case HARD: mapFile = "hard.tmx"; break;
+                    }
+                }
+                if (menuSelection == 1 && IsKeyPressed(KEY_LEFT)) {
+                    difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 2) % 3);
+                    // Update map file based on difficulty
+                    switch(difficulty) {
+                        case EASY: mapFile = "map.tmx"; break;
+                        case NORMAL: mapFile = "map.tmx"; break; // You can create a medium difficulty map
+                        case HARD: mapFile = "hard.tmx"; break;
+                    }
+                }
+                
+                // Start game
+                if (IsKeyPressed(KEY_ENTER) && menuSelection == 0) {
+                    // Load the map based on difficulty
+                    if (map != nullptr) {
+                        UnloadTMX(map);
+                    }
+                    map = LoadTMX(mapFile);
+                    if (map == nullptr) {
+                        TraceLog(LOG_ERROR, "Couldn't load the map: %s", mapFile);
+                        return EXIT_FAILURE;
+                    }
+                    
+                    // Reset player and game state
+                    ResetPlayer(&player, mapFile);
+                    orbs.clear();
+                    spikesLoaded = false;
+                    gameState = GAMEPLAY;
+                }
+                break;
+                
+            case GAMEPLAY:
+                // Check if player is dead
+                if (player.health <= 0 || player.state == DEAD) {
+                    gameState = GAME_OVER;
+                    break;
+                }
+                
+                AnimateTMX(map);
+                movePlayer(&player);
+                applyGravity(&(player.vel));
+                moveRectByVel(&(player.rect), &(player.vel));
+                checkTileCollisions(map, &player);
+                update_animation(&(player.animations[player.state]));
+                cameraFollow(&camera, &player);
+                spawnOrb(map, camera, orbs);
+                checkOrbCollection(&player, orbs);
 
-        killbox.y = camera.target.y + (H / 2.0f) / camera.zoom;
-        checkKillboxCollision(&player, killbox);
+                killbox.y = camera.target.y + (H / 2.0f) / camera.zoom;
+                checkKillboxCollision(&player, killbox);
+                break;
+                
+            case GAME_OVER:
+                // Handle game over inputs
+                if (IsKeyPressed(KEY_ENTER)) {
+                    // Restart game with same difficulty
+                    ResetPlayer(&player, mapFile);
+                    orbs.clear();
+                    spikesLoaded = false;
+                    gameState = GAMEPLAY;
+                }
+                else if (IsKeyPressed(KEY_M)) {
+                    // Return to menu
+                    gameState = MENU;
+                }
+                break;
+        }
 
         BeginDrawing();
         ClearBackground(SKYBLUE);
-        BeginMode2D(camera);
         
-        DrawTMX(map, &camera, 0, 0, WHITE);
-        DrawRectangleRec(killbox, RED);
-        drawPlayer(&player);
-        drawOrbs(orbs);
-        if (!spikesLoaded) {
-            LoadSpikesFromTMX(map, &player);
-            spikesLoaded = true; // Ensure spikes are only loaded once
-        }  // Load spikes from TMX
-        UpdateSpikes();           // Update spike positions (rising and falling)
-        DrawSpikes(); 
-        EndMode2D();
-        drawScore(player.score);
-        drawHealth(player.health);
-        
+        // Draw based on game state
+        switch(gameState) {
+            case MENU:
+                DrawMainMenu(menuSelection, difficulty);
+                break;
+                
+            case GAMEPLAY:
+                BeginMode2D(camera);
+                DrawTMX(map, &camera, 0, 0, WHITE);
+                DrawRectangleRec(killbox, RED);
+                drawPlayer(&player);
+                drawOrbs(orbs);
+                if (!spikesLoaded) {
+                    LoadSpikesFromTMX(map, &player);
+                    spikesLoaded = true; // Ensure spikes are only loaded once
+                }
+                UpdateSpikes();
+                DrawSpikes(); 
+                EndMode2D();
+                drawScore(player.score);
+                drawHealth(player.health);
+                break;
+                
+            case GAME_OVER:
+                DrawGameOver(player.score);
+                break;
+        }
         
         DrawFPS(5, 5);
         EndDrawing();
     }
 
-    UnloadTMX(map);
+    if (map != nullptr) {
+        UnloadTMX(map);
+    }
     UnloadTexture(hero);
     CloseWindow();
     return 0;
