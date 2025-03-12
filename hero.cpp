@@ -95,6 +95,19 @@ struct Projectile {
     bool isActivate;
 };
 
+struct Spike {
+    Rectangle rect;   // Collision box
+    bool active;      // Whether the spike is visible
+    float timer;      // Timer for toggling state
+    float yOffset;    // Controls spike movement up/down
+    bool rising;      // Whether the spike is moving up
+};
+std::vector<Spike> spikes;
+
+
+
+
+
 void update_animation(Animation *self) {
     float dt = GetFrameTime();
     self->rem -= dt;
@@ -113,6 +126,9 @@ void update_animation(Animation *self) {
         }
     }
 }
+
+
+
 
 Rectangle animation_frame(const Animation *self) {
     int x = (self->cur % (self->lst + 1)) * self->width;
@@ -371,6 +387,64 @@ void checkKillboxCollision(Player* player, const Rectangle& killbox) {
     }
 }
 
+void LoadSpikesFromTMX(TmxMap* map){
+    for (unsigned int i = 0; i < map->layersLength; i++) {
+        if (strcmp(map->layers[i].name, "spikes") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
+            TmxObjectGroup& objectGroup = map->layers[i].exact.objectGroup;
+            // Loop through all objects in the object group (spikes)
+            for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
+                TmxObject& obj = objectGroup.objects[j];
+
+                
+                // Create a new Spike object
+                Spike spike;
+                spike.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
+                spike.timer = GetRandomValue(1, 3);  // Random time for spike to rise/fall
+                spike.rising = true;  // Start by moving up
+                spike.yOffset = 0;    // Initial Y offset is zero
+                
+                // Add spike to the spikes vector
+                spikes.push_back(spike);
+            }
+        }
+    }
+}
+
+// void UpdateSpikes() {
+//     for (size_t i = 0; i < spikes.size(); i++) {
+//         // Reduce timer each frame
+//         spikes[i].timer -= GetFrameTime();
+        
+//         // If the timer is done, toggle the rise/fall direction and reset the timer
+//         if (spikes[i].timer <= 0) {
+//             spikes[i].timer = GetRandomValue(1, 3);  // Reset the timer to a new random value
+//             spikes[i].rising = !spikes[i].rising;    // Toggle rising/falling direction
+//         }
+
+//         // Move spike up or down based on the rising state
+//         if (spikes[i].rising) {
+//             spikes[i].yOffset += 100.0f * GetFrameTime(); // Increase the Y offset (moving up)
+//             if (spikes[i].yOffset >= spikes[i].rect.height) {
+//                 spikes[i].yOffset = spikes[i].rect.height; // Cap at the maximum height
+//             }
+//         } else {
+//             spikes[i].yOffset -= 100.0f * GetFrameTime(); // Decrease the Y offset (moving down)
+//             if (spikes[i].yOffset <= 0) {
+//                 spikes[i].yOffset = 0; // Stop at the original position
+//             }
+//         }
+
+//         // Apply the offset to the spike's Y position
+//         spikes[i].rect.y = spikes[i].rect.y - spikes[i].yOffset;
+//     }
+// }
+void DrawSpikes() {
+    for (size_t i = 0; i < spikes.size(); i++) {
+        // Draw the spike as a rectangle (you can also use a texture for spikes)
+        DrawRectangleRec(spikes[i].rect, RED);  // Or use a texture for spikes
+    }
+}
+
 
 int main() {
     InitWindow(W, H, "Hero Animation Example");
@@ -378,7 +452,7 @@ int main() {
     // Seed the random generator for orb spawning.
     srand((unsigned)time(NULL));
 
-    const char* tmx = "map.tmx";
+    const char* tmx = "hard.tmx";
     TmxMap* map = LoadTMX(tmx);
     if (map == nullptr) {
         TraceLog(LOG_ERROR, "Couldn't load the map: %s", tmx);
@@ -444,6 +518,9 @@ int main() {
         EndMode2D();
         drawScore(player.score);
         drawHealth(player.health);
+        LoadSpikesFromTMX(map);  // Load spikes from TMX
+        //UpdateSpikes();           // Update spike positions (rising and falling)
+        DrawSpikes(); 
         
         DrawFPS(5, 5);
         EndDrawing();
