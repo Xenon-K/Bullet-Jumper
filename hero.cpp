@@ -387,57 +387,60 @@ void checkKillboxCollision(Player* player, const Rectangle& killbox) {
     }
 }
 
-void LoadSpikesFromTMX(TmxMap* map){
+void LoadSpikesFromTMX(TmxMap* map, Player *player){
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "spikes") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
             TmxObjectGroup& objectGroup = map->layers[i].exact.objectGroup;
             // Loop through all objects in the object group (spikes)
             for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
                 TmxObject& obj = objectGroup.objects[j];
-
+                
                 
                 // Create a new Spike object
                 Spike spike;
                 spike.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
-                spike.timer = GetRandomValue(1, 3);  // Random time for spike to rise/fall
-                spike.rising = true;  // Start by moving up
-                spike.yOffset = 0;    // Initial Y offset is zero
+
                 
-                // Add spike to the spikes vector
-                spikes.push_back(spike);
+                    spike.timer = 1;  // Random time for spike to rise/fall
+                    spike.rising = true;  // Start by moving up
+                    spike.yOffset = 0;    // Initial Y offset is zero
+                    spikes.push_back(spike);
             }
         }
     }
 }
 
-// void UpdateSpikes() {
-//     for (size_t i = 0; i < spikes.size(); i++) {
-//         // Reduce timer each frame
-//         spikes[i].timer -= GetFrameTime();
-        
-//         // If the timer is done, toggle the rise/fall direction and reset the timer
-//         if (spikes[i].timer <= 0) {
-//             spikes[i].timer = GetRandomValue(1, 3);  // Reset the timer to a new random value
-//             spikes[i].rising = !spikes[i].rising;    // Toggle rising/falling direction
-//         }
+void UpdateSpikes() {
+    for (size_t i = 0; i < spikes.size(); i++) {
+        // Decrease the timer for up/down movement phase
+        spikes[i].timer -= GetFrameTime();
 
-//         // Move spike up or down based on the rising state
-//         if (spikes[i].rising) {
-//             spikes[i].yOffset += 100.0f * GetFrameTime(); // Increase the Y offset (moving up)
-//             if (spikes[i].yOffset >= spikes[i].rect.height) {
-//                 spikes[i].yOffset = spikes[i].rect.height; // Cap at the maximum height
-//             }
-//         } else {
-//             spikes[i].yOffset -= 100.0f * GetFrameTime(); // Decrease the Y offset (moving down)
-//             if (spikes[i].yOffset <= 0) {
-//                 spikes[i].yOffset = 0; // Stop at the original position
-//             }
-//         }
+        // The time it takes for a spike to move up or down before switching
+        const float MOVE_DURATION = 3.0f; // 1 second to move up or down
 
-//         // Apply the offset to the spike's Y position
-//         spikes[i].rect.y = spikes[i].rect.y - spikes[i].yOffset;
-//     }
-// }
+        // Check if the spike is currently in the "move up" phase
+        if (spikes[i].rising) {
+            // If the spike has finished rising, stop for the pause
+            if (spikes[i].timer <= 0) {
+                spikes[i].timer = MOVE_DURATION; // Pause for a while before moving down
+                spikes[i].rising = false;       // Switch to the downward movement phase
+            } else {
+                // Move the spike up
+                spikes[i].rect.y -= 1.0f;  // Move up by a small value (e.g., 10 pixels)
+            }
+        } else { 
+            // If it's in the "move down" phase
+            if (spikes[i].timer <= 0) {
+                spikes[i].timer = MOVE_DURATION; // Pause before moving up again
+                spikes[i].rising = true;        // Switch to the upward movement phase
+            } else {
+                // Move the spike down to the original position
+                spikes[i].rect.y += 1.0f;  // Move down by a small value (e.g., 10 pixels)
+            }
+        }
+    }
+}
+
 void DrawSpikes() {
     for (size_t i = 0; i < spikes.size(); i++) {
         // Draw the spike as a rectangle (you can also use a texture for spikes)
@@ -491,7 +494,8 @@ int main() {
     Rectangle killbox = {0, 0, (float)W, 40}; // Width matches screen, height can be adjusted
 
     std::vector<Score_Orb> orbs;
-
+    static bool spikesLoaded = false;
+    
     while (!WindowShouldClose()) {
         AnimateTMX(map);
         movePlayer(&player);
@@ -515,12 +519,16 @@ int main() {
         DrawRectangleRec(killbox, RED);
         drawPlayer(&player);
         drawOrbs(orbs);
+        if (!spikesLoaded) {
+            LoadSpikesFromTMX(map, &player);
+            spikesLoaded = true; // Ensure spikes are only loaded once
+        }  // Load spikes from TMX
+        UpdateSpikes();           // Update spike positions (rising and falling)
+        DrawSpikes(); 
         EndMode2D();
         drawScore(player.score);
         drawHealth(player.health);
-        LoadSpikesFromTMX(map);  // Load spikes from TMX
-        //UpdateSpikes();           // Update spike positions (rising and falling)
-        DrawSpikes(); 
+        
         
         DrawFPS(5, 5);
         EndDrawing();
