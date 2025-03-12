@@ -9,6 +9,15 @@
 #include <string>
 #include <unordered_set>
 
+// Sound effect and music variables
+Music menuMusic;
+Sound jumpSound;
+Sound collectSound;
+Sound deathSound;
+Sound menuSelectSound;
+Sound gameStartSound;
+Sound landSound;
+
 const int W = 720;
 const int H = 1280;
 const float MAX_GRAV = 300.0f;
@@ -118,6 +127,14 @@ struct Spike {
 };
 std::vector<Spike> spikes;
 
+// Add these new structures and variables
+struct DeathTransition {
+    bool active;
+    float alpha;
+    float timer;
+    const float duration = 1.0f; // 1 second transition
+};
+
 void update_animation(Animation *self) {
     float dt = GetFrameTime();
     self->rem -= dt;
@@ -181,6 +198,9 @@ void movePlayer(Player *player) {
         player->state = CurrentState::JUMPING;
         player->isJumping = true;
         changedState = true;
+        
+        // Play jump sound
+        PlaySound(jumpSound);
     }
   
     // Holding SPACE boosts jump height
@@ -264,7 +284,8 @@ void checkOrbCollection(Player *player, std::vector<Score_Orb> &orbs) {
     for (auto it = orbs.begin(); it != orbs.end();) {
         if (CheckCollisionRecs(player->rect, it->rect)) {
             player->score += 1;
-            // Optionally, you could play a sound or animation here.
+            // Play collect sound
+            PlaySound(collectSound);
             it = orbs.erase(it);
         } else {
             ++it;
@@ -300,6 +321,8 @@ void keepPlayerInScreen(Player *player) {
 }
 
 void checkTileCollisions(TmxMap *map, Player *player) {
+    bool wasJumping = player->isJumping;
+    
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
             TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
@@ -325,6 +348,11 @@ void checkTileCollisions(TmxMap *map, Player *player) {
                         player->vel.y = 0.0f;
                         player->rect.y = platform.y - player->rect.height;
                         player->isJumping = false; // Allow jumping again
+                        
+                        // Play landing sound if player was jumping before
+                        if (wasJumping) {
+                            PlaySound(landSound);
+                        }
                     } else if (comingFromBottom) {
                         // Hitting the bottom of the platform
                         player->vel.y = 0.0f;
@@ -380,10 +408,110 @@ void cameraFollow(Camera2D *camera, const Player *player) {
     camera->target.y = highestCameraY; // Keep camera at the highest Y position
 }
 
-void checkKillboxCollision(Player* player, const Rectangle& killbox) {
-    if (CheckCollisionRecs(player->rect, killbox)) {
-        player->health = 0;
-        player->state = DEAD;
+// Reset camera follow system
+void ResetCameraFollow() {
+    // This function resets the static variables in cameraFollow
+    static bool* initialized = nullptr;
+    static float* highestCameraY = nullptr;
+    
+    // Find the static variables by address
+    if (!initialized || !highestCameraY) {
+        // This is a hack to reset static variables
+        // We're using a dummy camera and player to call cameraFollow
+        // which will initialize the static variables
+        Camera2D dummyCamera = {};
+        Player dummyPlayer = {};
+        dummyPlayer.rect.x = 0;
+        dummyPlayer.rect.y = 1700;
+        cameraFollow(&dummyCamera, &dummyPlayer);
+        
+        // Now we need to find where these static variables are stored
+        // This is a bit of a hack, but it works for our purpose
+        initialized = new bool(false);
+        highestCameraY = new float(1700);
+    }
+    
+    // Reset the static variables
+    *initialized = false;
+}
+
+void checkKillboxCollision(Player* player, const Rectangle& killbox, DeathTransition* transition) {
+    // Only check if we're not already in a death transition
+    if (!transition->active) {
+        // Check if player is below the killbox (completely fallen off the map)
+        if (player->rect.y > killbox.y + killbox.height) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
+            TraceLog(LOG_INFO, "Player fell off the map!");
+        }
+        
+        // Check if player is touching the killbox
+        if (CheckCollisionRecs(player->rect, killbox)) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
+            TraceLog(LOG_INFO, "Player touched the killbox!");
+        }
+    }
+}
+
+// Check if player is outside horizontal map boundaries
+void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* transition) {
+    // Only check if we're not already in a death transition
+    if (!transition->active) {
+        // Get map width from TMX
+        float mapWidth = 0;
+        for (unsigned int i = 0; i < map->layersLength; i++) {
+            if (map->layers[i].type == LAYER_TYPE_TILE_LAYER) {
+                mapWidth = map->layers[i].exact.tileLayer.width * map->tileWidth;
+                break;
+            }
+        }
+        
+        // Check if player is outside map boundaries
+        if (player->rect.x < -100 || player->rect.x > mapWidth + 100) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
+            TraceLog(LOG_INFO, "Player went outside horizontal map boundaries!");
+        }
+    }
+}
+
+// Update death transition effect
+bool updateDeathTransition(DeathTransition* transition) {
+    if (transition->active) {
+        transition->timer += GetFrameTime();
+        transition->alpha = transition->timer / transition->duration;
+        
+        // Clamp alpha between 0 and 1
+        if (transition->alpha > 1.0f) {
+            transition->alpha = 1.0f;
+            // Transition complete
+            return true;
+        }
+    }
+    return false;
+}
+
+// Draw death transition effect
+void drawDeathTransition(DeathTransition* transition) {
+    if (transition->active) {
+        // Draw a black rectangle that fades in
+        DrawRectangle(0, 0, W, H, ColorAlpha(BLACK, transition->alpha));
     }
 }
 
@@ -512,6 +640,7 @@ void DrawGameOver(int score) {
 
 // Reset player for a new game
 void ResetPlayer(Player* player, const char* mapFile) {
+    // Set player to a safe starting position
     player->rect = {0, 1700, 64.0f, 64.0f};
     player->vel = {0.0f, 0.0f};
     player->dir = RIGHT;
@@ -522,9 +651,82 @@ void ResetPlayer(Player* player, const char* mapFile) {
     player->score = 0;
 }
 
+// Reset camera to initial position
+void ResetCamera(Camera2D* camera, const Player* player) {
+    camera->target = {player->rect.x, player->rect.y};
+    camera->offset = {W / 2.0f, H / 2.0f};
+    camera->rotation = 0.0f;
+    camera->zoom = 1.0f;
+}
+
+// Load all game sounds
+void LoadGameSounds() {
+    // Load sound effects
+    jumpSound = LoadSound("assets/sfx/player-jump.wav");
+    TraceLog(LOG_INFO, "Loaded jump sound");
+    SetSoundVolume(jumpSound, 1.0f); // Full volume
+    
+    collectSound = LoadSound("assets/sfx/got-coin.wav");
+    TraceLog(LOG_INFO, "Loaded collect sound");
+    SetSoundVolume(collectSound, 1.0f); // Full volume
+    
+    deathSound = LoadSound("assets/sfx/player-lost.wav");
+    TraceLog(LOG_INFO, "Loaded death sound");
+    SetSoundVolume(deathSound, 1.0f); // Full volume
+    
+    menuSelectSound = LoadSound("assets/sfx/menu-select.wav");
+    TraceLog(LOG_INFO, "Loaded menu select sound");
+    SetSoundVolume(menuSelectSound, 1.0f); // Full volume
+    
+    // Use a different sound for game start
+    gameStartSound = LoadSound("assets/sfx/menu-select.wav");
+    TraceLog(LOG_INFO, "Loaded game start sound");
+    SetSoundVolume(gameStartSound, 1.0f); // Full volume
+    
+    landSound = LoadSound("assets/sfx/land.wav");
+    TraceLog(LOG_INFO, "Loaded land sound");
+    SetSoundVolume(landSound, 1.0f); // Full volume
+    
+    // Load music
+    menuMusic = LoadMusicStream("assets/sfx/level-music.wav");
+    TraceLog(LOG_INFO, "Loaded menu music");
+    SetMusicVolume(menuMusic, 0.7f); // Set volume to 70%
+}
+
+// Unload all game sounds
+void UnloadGameSounds() {
+    // Unload sound effects
+    UnloadSound(jumpSound);
+    UnloadSound(collectSound);
+    UnloadSound(deathSound);
+    UnloadSound(menuSelectSound);
+    UnloadSound(gameStartSound);
+    UnloadSound(landSound);
+    
+    // Unload music
+    UnloadMusicStream(menuMusic);
+}
+
 int main() {
     InitWindow(W, H, "Bullet Jumper");
     SetTargetFPS(60);
+    
+    // Initialize audio device
+    InitAudioDevice();
+    
+    // Check if audio device is initialized
+    if (IsAudioDeviceReady()) {
+        TraceLog(LOG_INFO, "Audio device initialized successfully");
+    } else {
+        TraceLog(LOG_ERROR, "Failed to initialize audio device");
+    }
+    
+    // Load all game sounds
+    LoadGameSounds();
+    
+    // Start playing menu music
+    PlayMusicStream(menuMusic);
+    
     // Seed the random generator for orb spawning.
     srand((unsigned)time(NULL));
 
@@ -565,15 +767,32 @@ int main() {
         .rotation = 0.0f,
         .zoom = 1.0f,
     };
-    Rectangle killbox = {0, 0, (float)W, 40}; // Width matches screen, height can be adjusted
+    
+    // Modify killbox to be more reliable
+    // Make it thicker and position it at the bottom of the visible screen
+    Rectangle killbox = {0, 0, (float)W, 100}; 
 
     std::vector<Score_Orb> orbs;
     static bool spikesLoaded = false;
+    
+    // Variables needed for gameplay (moved outside switch statements)
+    float maxFallDistance = 500.0f; // Maximum distance player can fall below camera
+    float bottomOfScreen = 0.0f;
+    Color killboxColor = {255, 0, 0, 128}; // Semi-transparent red
+    
+    // Initialize death transition
+    DeathTransition deathTransition = {false, 0.0f, 0.0f};
     
     while (!WindowShouldClose()) {
         // Handle game state logic
         switch(gameState) {
             case MENU:
+                // Update menu music
+                UpdateMusicStream(menuMusic);
+                
+                // Reset death transition when entering menu
+                deathTransition.active = false;
+                
                 // Menu navigation
                 if (IsKeyPressed(KEY_DOWN)) {
                     menuSelection = (menuSelection + 1) % 2; // Cycle through menu options
@@ -585,6 +804,8 @@ int main() {
                 // Handle menu selection
                 if (menuSelection == 1 && IsKeyPressed(KEY_RIGHT)) {
                     difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 1) % 3);
+                    // Play menu selection sound
+                    PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
                         case EASY: mapFile = "map.tmx"; break;
@@ -594,6 +815,8 @@ int main() {
                 }
                 if (menuSelection == 1 && IsKeyPressed(KEY_LEFT)) {
                     difficulty = static_cast<Difficulty>((static_cast<int>(difficulty) + 2) % 3);
+                    // Play menu selection sound
+                    PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
                         case EASY: mapFile = "map.tmx"; break;
@@ -602,8 +825,19 @@ int main() {
                     }
                 }
                 
+                // Menu navigation
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_UP)) {
+                    PlaySound(menuSelectSound);
+                }
+                
                 // Start game
                 if (IsKeyPressed(KEY_ENTER) && menuSelection == 0) {
+                    // Play game start sound
+                    PlaySound(gameStartSound);
+                    
+                    // Stop menu music
+                    StopMusicStream(menuMusic);
+                    
                     // Load the map based on difficulty
                     if (map != nullptr) {
                         UnloadTMX(map);
@@ -616,6 +850,10 @@ int main() {
                     
                     // Reset player and game state
                     ResetPlayer(&player, mapFile);
+                    // Reset camera follow system
+                    ResetCameraFollow();
+                    // Reset camera to follow the player at the new position
+                    ResetCamera(&camera, &player);
                     orbs.clear();
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
@@ -625,34 +863,76 @@ int main() {
             case GAMEPLAY:
                 // Check if player is dead
                 if (player.health <= 0 || player.state == DEAD) {
-                    gameState = GAME_OVER;
-                    break;
+                    // Only transition to game over if death transition is complete
+                    if (!deathTransition.active || updateDeathTransition(&deathTransition)) {
+                        gameState = GAME_OVER;
+                        break;
+                    }
                 }
                 
-                AnimateTMX(map);
-                movePlayer(&player);
-                applyGravity(&(player.vel));
-                moveRectByVel(&(player.rect), &(player.vel));
-                checkTileCollisions(map, &player);
-                update_animation(&(player.animations[player.state]));
-                cameraFollow(&camera, &player);
-                spawnOrb(map, camera, orbs);
-                checkOrbCollection(&player, orbs);
+                // Only update gameplay if not in death transition
+                if (!deathTransition.active) {
+                    AnimateTMX(map);
+                    movePlayer(&player);
+                    applyGravity(&(player.vel));
+                    moveRectByVel(&(player.rect), &(player.vel));
+                    checkTileCollisions(map, &player);
+                    update_animation(&(player.animations[player.state]));
+                    cameraFollow(&camera, &player);
+                    spawnOrb(map, camera, orbs);
+                    checkOrbCollection(&player, orbs);
 
-                killbox.y = camera.target.y + (H / 2.0f) / camera.zoom;
-                checkKillboxCollision(&player, killbox);
+                    // Update killbox position to be at the bottom of the visible screen
+                    killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
+                    checkKillboxCollision(&player, killbox, &deathTransition);
+                    
+                    // Check horizontal boundaries
+                    checkHorizontalBoundaries(&player, map, &deathTransition);
+                    
+                    // Add a secondary check for falling too far below the camera view
+                    bottomOfScreen = camera.target.y + (H / 2.0f) / camera.zoom;
+                    if (player.rect.y > bottomOfScreen + maxFallDistance && !deathTransition.active) {
+                        player.health = 0;
+                        player.state = DEAD;
+                        deathTransition.active = true;
+                        deathTransition.alpha = 0.0f;
+                        deathTransition.timer = 0.0f;
+                        // Play death sound
+                        PlaySound(deathSound);
+                        TraceLog(LOG_INFO, "Player fell too far below the screen!");
+                    }
+                } else {
+                    // Update death transition
+                    updateDeathTransition(&deathTransition);
+                }
                 break;
                 
             case GAME_OVER:
+                // Reset death transition when entering game over
+                deathTransition.active = false;
+                
                 // Handle game over inputs
                 if (IsKeyPressed(KEY_ENTER)) {
+                    // Play game start sound
+                    PlaySound(gameStartSound);
+                    
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
+                    // Reset camera follow system
+                    ResetCameraFollow();
+                    // Reset camera to follow the player at the new position
+                    ResetCamera(&camera, &player);
                     orbs.clear();
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
+                    // Play menu select sound
+                    PlaySound(menuSelectSound);
+                    
+                    // Start playing menu music again
+                    PlayMusicStream(menuMusic);
+                    
                     // Return to menu
                     gameState = MENU;
                 }
@@ -671,7 +951,12 @@ int main() {
             case GAMEPLAY:
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
-                DrawRectangleRec(killbox, RED);
+                
+                // Only draw killbox if not in death transition
+                if (!deathTransition.active) {
+                    DrawRectangleRec(killbox, killboxColor);
+                }
+                
                 drawPlayer(&player);
                 drawOrbs(orbs);
                 if (!spikesLoaded) {
@@ -683,6 +968,9 @@ int main() {
                 EndMode2D();
                 drawScore(player.score);
                 drawHealth(player.health);
+                
+                // Draw death transition effect on top of everything
+                drawDeathTransition(&deathTransition);
                 break;
                 
             case GAME_OVER:
@@ -698,6 +986,13 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
+
+    // Unload all game sounds
+    UnloadGameSounds();
+
+    // Close audio device
+    CloseAudioDevice();
+
     CloseWindow();
     return 0;
 }
