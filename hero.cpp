@@ -381,9 +381,18 @@ void cameraFollow(Camera2D *camera, const Player *player) {
 }
 
 void checkKillboxCollision(Player* player, const Rectangle& killbox) {
+    // Check if player is below the killbox (completely fallen off the map)
+    if (player->rect.y > killbox.y + killbox.height) {
+        player->health = 0;
+        player->state = DEAD;
+        TraceLog(LOG_INFO, "Player fell off the map!");
+    }
+    
+    // Check if player is touching the killbox
     if (CheckCollisionRecs(player->rect, killbox)) {
         player->health = 0;
         player->state = DEAD;
+        TraceLog(LOG_INFO, "Player touched the killbox!");
     }
 }
 
@@ -512,6 +521,7 @@ void DrawGameOver(int score) {
 
 // Reset player for a new game
 void ResetPlayer(Player* player, const char* mapFile) {
+    // Set player to a safe starting position
     player->rect = {0, 1700, 64.0f, 64.0f};
     player->vel = {0.0f, 0.0f};
     player->dir = RIGHT;
@@ -520,6 +530,14 @@ void ResetPlayer(Player* player, const char* mapFile) {
     player->jumpTime = 0.0f;
     player->health = 10;
     player->score = 0;
+}
+
+// Reset camera to initial position
+void ResetCamera(Camera2D* camera, const Player* player) {
+    camera->target = {player->rect.x, player->rect.y};
+    camera->offset = {W / 2.0f, H / 2.0f};
+    camera->rotation = 0.0f;
+    camera->zoom = 1.0f;
 }
 
 int main() {
@@ -565,10 +583,18 @@ int main() {
         .rotation = 0.0f,
         .zoom = 1.0f,
     };
-    Rectangle killbox = {0, 0, (float)W, 40}; // Width matches screen, height can be adjusted
+    
+    // Modify killbox to be more reliable
+    // Make it thicker and position it at the bottom of the visible screen
+    Rectangle killbox = {0, 0, (float)W, 100}; 
 
     std::vector<Score_Orb> orbs;
     static bool spikesLoaded = false;
+    
+    // Variables needed for gameplay (moved outside switch statements)
+    float maxFallDistance = 500.0f; // Maximum distance player can fall below camera
+    float bottomOfScreen = 0.0f;
+    Color killboxColor = {255, 0, 0, 128}; // Semi-transparent red
     
     while (!WindowShouldClose()) {
         // Handle game state logic
@@ -639,8 +665,18 @@ int main() {
                 spawnOrb(map, camera, orbs);
                 checkOrbCollection(&player, orbs);
 
-                killbox.y = camera.target.y + (H / 2.0f) / camera.zoom;
+                // Update killbox position to be at the bottom of the visible screen
+                // Position it so it's just visible at the bottom of the screen
+                killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
                 checkKillboxCollision(&player, killbox);
+                
+                // Add a secondary check for falling too far below the camera view
+                bottomOfScreen = camera.target.y + (H / 2.0f) / camera.zoom;
+                if (player.rect.y > bottomOfScreen + maxFallDistance) {
+                    player.health = 0;
+                    player.state = DEAD;
+                    TraceLog(LOG_INFO, "Player fell too far below the screen!");
+                }
                 break;
                 
             case GAME_OVER:
@@ -648,6 +684,10 @@ int main() {
                 if (IsKeyPressed(KEY_ENTER)) {
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
+                    // Reset camera to follow the player at the new position
+                    ResetCamera(&camera, &player);
+                    // Reset camera follow system
+                    cameraFollow(&camera, &player);
                     orbs.clear();
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
@@ -671,7 +711,10 @@ int main() {
             case GAMEPLAY:
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
-                DrawRectangleRec(killbox, RED);
+                
+                // Draw killbox with semi-transparent red
+                DrawRectangleRec(killbox, killboxColor);
+                
                 drawPlayer(&player);
                 drawOrbs(orbs);
                 if (!spikesLoaded) {
