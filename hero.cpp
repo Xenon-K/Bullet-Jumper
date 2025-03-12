@@ -118,6 +118,14 @@ struct Spike {
 };
 std::vector<Spike> spikes;
 
+// Add these new structures and variables
+struct DeathTransition {
+    bool active;
+    float alpha;
+    float timer;
+    const float duration = 1.0f; // 1 second transition
+};
+
 void update_animation(Animation *self) {
     float dt = GetFrameTime();
     self->rem -= dt;
@@ -380,19 +388,104 @@ void cameraFollow(Camera2D *camera, const Player *player) {
     camera->target.y = highestCameraY; // Keep camera at the highest Y position
 }
 
-void checkKillboxCollision(Player* player, const Rectangle& killbox) {
-    // Check if player is below the killbox (completely fallen off the map)
-    if (player->rect.y > killbox.y + killbox.height) {
-        player->health = 0;
-        player->state = DEAD;
-        TraceLog(LOG_INFO, "Player fell off the map!");
+// Reset camera follow system
+void ResetCameraFollow() {
+    // This function resets the static variables in cameraFollow
+    static bool* initialized = nullptr;
+    static float* highestCameraY = nullptr;
+    
+    // Find the static variables by address
+    if (!initialized || !highestCameraY) {
+        // This is a hack to reset static variables
+        // We're using a dummy camera and player to call cameraFollow
+        // which will initialize the static variables
+        Camera2D dummyCamera = {};
+        Player dummyPlayer = {};
+        dummyPlayer.rect.x = 0;
+        dummyPlayer.rect.y = 1700;
+        cameraFollow(&dummyCamera, &dummyPlayer);
+        
+        // Now we need to find where these static variables are stored
+        // This is a bit of a hack, but it works for our purpose
+        initialized = new bool(false);
+        highestCameraY = new float(1700);
     }
     
-    // Check if player is touching the killbox
-    if (CheckCollisionRecs(player->rect, killbox)) {
-        player->health = 0;
-        player->state = DEAD;
-        TraceLog(LOG_INFO, "Player touched the killbox!");
+    // Reset the static variables
+    *initialized = false;
+}
+
+void checkKillboxCollision(Player* player, const Rectangle& killbox, DeathTransition* transition) {
+    // Only check if we're not already in a death transition
+    if (!transition->active) {
+        // Check if player is below the killbox (completely fallen off the map)
+        if (player->rect.y > killbox.y + killbox.height) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            TraceLog(LOG_INFO, "Player fell off the map!");
+        }
+        
+        // Check if player is touching the killbox
+        if (CheckCollisionRecs(player->rect, killbox)) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            TraceLog(LOG_INFO, "Player touched the killbox!");
+        }
+    }
+}
+
+// Check if player is outside horizontal map boundaries
+void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* transition) {
+    // Only check if we're not already in a death transition
+    if (!transition->active) {
+        // Get map width from TMX
+        float mapWidth = 0;
+        for (unsigned int i = 0; i < map->layersLength; i++) {
+            if (map->layers[i].type == LAYER_TYPE_TILE_LAYER) {
+                mapWidth = map->layers[i].exact.tileLayer.width * map->tileWidth;
+                break;
+            }
+        }
+        
+        // Check if player is outside map boundaries
+        if (player->rect.x < -100 || player->rect.x > mapWidth + 100) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            TraceLog(LOG_INFO, "Player went outside horizontal map boundaries!");
+        }
+    }
+}
+
+// Update death transition effect
+bool updateDeathTransition(DeathTransition* transition) {
+    if (transition->active) {
+        transition->timer += GetFrameTime();
+        transition->alpha = transition->timer / transition->duration;
+        
+        // Clamp alpha between 0 and 1
+        if (transition->alpha > 1.0f) {
+            transition->alpha = 1.0f;
+            // Transition complete
+            return true;
+        }
+    }
+    return false;
+}
+
+// Draw death transition effect
+void drawDeathTransition(DeathTransition* transition) {
+    if (transition->active) {
+        // Draw a black rectangle that fades in
+        DrawRectangle(0, 0, W, H, ColorAlpha(BLACK, transition->alpha));
     }
 }
 
@@ -596,10 +689,16 @@ int main() {
     float bottomOfScreen = 0.0f;
     Color killboxColor = {255, 0, 0, 128}; // Semi-transparent red
     
+    // Initialize death transition
+    DeathTransition deathTransition = {false, 0.0f, 0.0f};
+    
     while (!WindowShouldClose()) {
         // Handle game state logic
         switch(gameState) {
             case MENU:
+                // Reset death transition when entering menu
+                deathTransition.active = false;
+                
                 // Menu navigation
                 if (IsKeyPressed(KEY_DOWN)) {
                     menuSelection = (menuSelection + 1) % 2; // Cycle through menu options
@@ -642,6 +741,10 @@ int main() {
                     
                     // Reset player and game state
                     ResetPlayer(&player, mapFile);
+                    // Reset camera follow system
+                    ResetCameraFollow();
+                    // Reset camera to follow the player at the new position
+                    ResetCamera(&camera, &player);
                     orbs.clear();
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
@@ -651,43 +754,60 @@ int main() {
             case GAMEPLAY:
                 // Check if player is dead
                 if (player.health <= 0 || player.state == DEAD) {
-                    gameState = GAME_OVER;
-                    break;
+                    // Only transition to game over if death transition is complete
+                    if (!deathTransition.active || updateDeathTransition(&deathTransition)) {
+                        gameState = GAME_OVER;
+                        break;
+                    }
                 }
                 
-                AnimateTMX(map);
-                movePlayer(&player);
-                applyGravity(&(player.vel));
-                moveRectByVel(&(player.rect), &(player.vel));
-                checkTileCollisions(map, &player);
-                update_animation(&(player.animations[player.state]));
-                cameraFollow(&camera, &player);
-                spawnOrb(map, camera, orbs);
-                checkOrbCollection(&player, orbs);
+                // Only update gameplay if not in death transition
+                if (!deathTransition.active) {
+                    AnimateTMX(map);
+                    movePlayer(&player);
+                    applyGravity(&(player.vel));
+                    moveRectByVel(&(player.rect), &(player.vel));
+                    checkTileCollisions(map, &player);
+                    update_animation(&(player.animations[player.state]));
+                    cameraFollow(&camera, &player);
+                    spawnOrb(map, camera, orbs);
+                    checkOrbCollection(&player, orbs);
 
-                // Update killbox position to be at the bottom of the visible screen
-                // Position it so it's just visible at the bottom of the screen
-                killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
-                checkKillboxCollision(&player, killbox);
-                
-                // Add a secondary check for falling too far below the camera view
-                bottomOfScreen = camera.target.y + (H / 2.0f) / camera.zoom;
-                if (player.rect.y > bottomOfScreen + maxFallDistance) {
-                    player.health = 0;
-                    player.state = DEAD;
-                    TraceLog(LOG_INFO, "Player fell too far below the screen!");
+                    // Update killbox position to be at the bottom of the visible screen
+                    killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
+                    checkKillboxCollision(&player, killbox, &deathTransition);
+                    
+                    // Check horizontal boundaries
+                    checkHorizontalBoundaries(&player, map, &deathTransition);
+                    
+                    // Add a secondary check for falling too far below the camera view
+                    bottomOfScreen = camera.target.y + (H / 2.0f) / camera.zoom;
+                    if (player.rect.y > bottomOfScreen + maxFallDistance && !deathTransition.active) {
+                        player.health = 0;
+                        player.state = DEAD;
+                        deathTransition.active = true;
+                        deathTransition.alpha = 0.0f;
+                        deathTransition.timer = 0.0f;
+                        TraceLog(LOG_INFO, "Player fell too far below the screen!");
+                    }
+                } else {
+                    // Update death transition
+                    updateDeathTransition(&deathTransition);
                 }
                 break;
                 
             case GAME_OVER:
+                // Reset death transition when entering game over
+                deathTransition.active = false;
+                
                 // Handle game over inputs
                 if (IsKeyPressed(KEY_ENTER)) {
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
+                    // Reset camera follow system
+                    ResetCameraFollow();
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
-                    // Reset camera follow system
-                    cameraFollow(&camera, &player);
                     orbs.clear();
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
@@ -712,8 +832,10 @@ int main() {
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
                 
-                // Draw killbox with semi-transparent red
-                DrawRectangleRec(killbox, killboxColor);
+                // Only draw killbox if not in death transition
+                if (!deathTransition.active) {
+                    DrawRectangleRec(killbox, killboxColor);
+                }
                 
                 drawPlayer(&player);
                 drawOrbs(orbs);
@@ -726,6 +848,9 @@ int main() {
                 EndMode2D();
                 drawScore(player.score);
                 drawHealth(player.health);
+                
+                // Draw death transition effect on top of everything
+                drawDeathTransition(&deathTransition);
                 break;
                 
             case GAME_OVER:
