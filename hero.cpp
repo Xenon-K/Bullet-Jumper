@@ -81,6 +81,7 @@ struct Animation {
 
 struct Player {
     Rectangle rect;
+    Rectangle hitbox;
     Vector2 vel;
     Texture2D sprite;
     Direction dir;
@@ -122,10 +123,22 @@ struct Spike {
     Rectangle rect;   // Collision box
     bool active;      // Whether the spike is visible
     float timer;      // Timer for toggling state
-    float yOffset;    // Controls spike movement up/down
-    bool rising;      // Whether the spike is moving up
+    float startY;
+    float endY;    // Controls spike movement up/down
+    bool rising;  
+    bool moving;
+    Texture2D texture;    // Whether the spike is moving up
+};
+
+struct fallingPlat{
+    Rectangle rect;
+    Vector2 vel;
+    Texture2D text;
+    bool isFalling;
+
 };
 std::vector<Spike> spikes;
+std::vector<fallingPlat> falling_Plat;
 
 // Add these new structures and variables
 struct DeathTransition {
@@ -167,6 +180,9 @@ void drawPlayer(const Player *player) {
     }
     Rectangle source = animation_frame(&(player->animations[player->state]));
     source.width = source.width * static_cast<float>(player->dir);
+    
+    DrawRectangleRec(player->rect, GREEN);//Debug for player collision and spritebox
+    DrawRectangleRec(player->hitbox, RED);//Debug for Hitbox
     DrawTexturePro(player->sprite, source, player->rect, {0, 0}, 0.0f, WHITE);
 }
 
@@ -229,6 +245,9 @@ void movePlayer(Player *player) {
     if (!changedState) {
         player->state = CurrentState::IDLE;
     }
+
+    player->hitbox.x = player->rect.x + 16;
+    player->hitbox.y = player->rect.y;
 }
 
 Color getOrbColor(float score) {
@@ -529,41 +548,65 @@ void LoadSpikesFromTMX(TmxMap* map, Player *player){
                 spike.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
 
                 
-                    spike.timer = 1;  // Random time for spike to rise/fall
+                    spike.timer = 0.5f;  // Random time for spike to rise/fall
                     spike.rising = true;  // Start by moving up
-                    spike.yOffset = 0;    // Initial Y offset is zero
+                    spike.startY = spike.rect.y; 
+                    spike.texture = LoadTexture("assets/tiles-and-background-foreground/spike.png");
+                    spike.moving = true;   
                     spikes.push_back(spike);
             }
         }
     }
 }
 
-void UpdateSpikes() {
+void checkSpikeCol(Player* player, DeathTransition* transition){
+    for (size_t i = 0; i < spikes.size(); i++){
+        if(CheckCollisionRecs(player->hitbox, spikes[i].rect)){
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
+            TraceLog(LOG_INFO, "Player died to spikes!");
+        }
+    }
+}
+
+void UpdateSpikes(Player *player) {
     for (size_t i = 0; i < spikes.size(); i++) {
-        // Decrease the timer for up/down movement phase
+        // Decrease the timer
         spikes[i].timer -= GetFrameTime();
 
-        // The time it takes for a spike to move up or down before switching
-        const float MOVE_DURATION = 3.0f; // 1 second to move up or down
+        // Constants for timing
+        const float MOVE_DURATION = 1.0f;  // 1 second to move fully
+        const float PAUSE_DURATION = 0.5f; // Pause time before switching
+        const float MOVE_DISTANCE = 20.0f; // Pixels to move up or down
+        
+       
 
-        // Check if the spike is currently in the "move up" phase
-        if (spikes[i].rising) {
-            // If the spike has finished rising, stop for the pause
-            if (spikes[i].timer <= 0) {
-                spikes[i].timer = MOVE_DURATION; // Pause for a while before moving down
-                spikes[i].rising = false;       // Switch to the downward movement phase
+        if (spikes[i].moving) {
+            // If moving, interpolate position based on time progress
+            float progress = (MOVE_DURATION - spikes[i].timer) / MOVE_DURATION;
+            if (spikes[i].rising) {
+                spikes[i].rect.y = spikes[i].startY - (progress * MOVE_DISTANCE);
+                spikes[i].endY = spikes[i].rect.y;
             } else {
-                // Move the spike up
-                spikes[i].rect.y -= 1.0f;  // Move up by a small value (e.g., 10 pixels)
+                spikes[i].rect.y = spikes[i].endY + (progress * MOVE_DISTANCE);
             }
-        } else { 
-            // If it's in the "move down" phase
+
+            // Check if movement is complete
             if (spikes[i].timer <= 0) {
-                spikes[i].timer = MOVE_DURATION; // Pause before moving up again
-                spikes[i].rising = true;        // Switch to the upward movement phase
-            } else {
-                // Move the spike down to the original position
-                spikes[i].rect.y += 1.0f;  // Move down by a small value (e.g., 10 pixels)
+                spikes[i].timer = PAUSE_DURATION + (GetRandomValue(0, 100) / 200.0f); // Add a small random pause
+                spikes[i].moving = false; // Enter pause state
+            }
+        } else {
+            // If paused, wait until the pause timer runs out
+            if (spikes[i].timer <= 0) {
+                spikes[i].timer = MOVE_DURATION; // Reset timer for movement phase
+                spikes[i].moving = true;  // Resume movement
+                spikes[i].rising = !spikes[i].rising; // Switch direction
             }
         }
     }
@@ -571,10 +614,90 @@ void UpdateSpikes() {
 
 void DrawSpikes() {
     for (size_t i = 0; i < spikes.size(); i++) {
-        // Draw the spike as a rectangle (you can also use a texture for spikes)
-        DrawRectangleRec(spikes[i].rect, RED);  // Or use a texture for spikes
+        // Draw the spike texture at the correct position
+        DrawRectangleRec(spikes[i].rect, RED);
+        DrawTexturePro(
+            spikes[i].texture,                 // Texture
+            { 0, 0, (float)spikes[i].texture.width, (float)spikes[i].texture.height }, // Source Rectangle (Full texture)
+            spikes[i].rect,                     // Destination Rectangle
+            { 0, 0 },                           // Origin (top-left corner)
+            0,                                  // Rotation
+            WHITE                               // Color tint
+        );
     }
 }
+
+void LoadFallingPlat(TmxMap* map, Player *player){
+    bool wasJumping = player->isJumping;
+    for (unsigned int i = 0; i < map->layersLength; i++) {
+        if (strcmp(map->layers[i].name, "fallingPlat") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
+            TmxObjectGroup& objectGroup = map->layers[i].exact.objectGroup;
+            // Loop through all objects in the object group (spikes)
+            for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
+                TmxObject& obj = objectGroup.objects[j];
+                
+                
+                // Create a new plat object
+                fallingPlat platform;
+                platform.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
+                if (CheckCollisionRecs(player->rect, platform.rect)) {
+                    TraceLog(LOG_DEBUG, "Collision detected!");
+
+                    // Compute previous position
+                    float previousX = player->rect.x - player->vel.x * GetFrameTime();
+                    float previousY = player->rect.y - player->vel.y * GetFrameTime();
+
+                    // Determine collision direction
+                    bool comingFromTop = previousY + player->rect.height <= platform.rect.y;
+                    bool comingFromBottom = previousY >= platform.rect.y + platform.rect.height;
+                    bool comingFromLeft = previousX + player->rect.width <= platform.rect.x;
+                    bool comingFromRight = previousX >= platform.rect.x + platform.rect.width;
+
+                    if (comingFromTop) {
+                        // Standing on platform
+                        player->vel.y = 0.0f;
+                        player->rect.y = platform.rect.y - player->rect.height;
+                    
+                        player->isJumping = false; // Allow jumping again
+                        
+                        // Play landing sound if player was jumping before
+                        if (wasJumping) {
+                            PlaySound(landSound);
+                        }
+                    } else if (comingFromBottom) {
+                        // Hitting the bottom of the platform
+                        player->vel.y = 0.0f;
+                        player->rect.y = platform.rect.y + platform.rect.height;
+                    } else if (comingFromLeft) {
+                        // Hitting the left side
+                        player->vel.x = 0.0f;
+                        player->rect.x = platform.rect.x - player->rect.width;
+                    } else if (comingFromRight) {
+                        // Hitting the right side
+                        player->vel.x = 0.0f;
+                        player->rect.x = platform.rect.x + platform.rect.width;
+                    }
+                
+                }
+                falling_Plat.push_back(platform);
+        }
+    }
+}
+}
+void updateFallingPlat(){
+    for (size_t i = 0; i < falling_Plat.size(); i++){
+
+    }
+}
+
+void drawFallingPlat(){
+    for (size_t i = 0; i < falling_Plat.size(); i++) {
+        // Draw the fallingplat texture at the correct position
+        DrawRectangleRec(falling_Plat[i].rect, RED);
+    }
+}
+
+
 
 // Draw the main menu
 void DrawMainMenu(int selectedOption, Difficulty difficulty) {
@@ -642,6 +765,7 @@ void DrawGameOver(int score) {
 void ResetPlayer(Player* player, const char* mapFile) {
     // Set player to a safe starting position
     player->rect = {0, 1700, 64.0f, 64.0f};
+    player->hitbox = {0, 1700, 32.0f, 64.0f};
     player->vel = {0.0f, 0.0f};
     player->dir = RIGHT;
     player->state = IDLE;
@@ -734,11 +858,13 @@ int main() {
     GameState gameState = MENU;
     Difficulty difficulty = NORMAL;
     int menuSelection = 0;
-    const char* mapFile = "map.tmx"; // Default map (normal difficulty)
+    const char* mapFile = "normal.tmx"; // Default map (normal difficulty)
     
     TmxMap* map = nullptr;
     
     Texture2D hero = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png");
+
+    
 
     Player player = {
         .rect = {0, 1700, 64.0f, 64.0f},
@@ -774,6 +900,7 @@ int main() {
 
     std::vector<Score_Orb> orbs;
     static bool spikesLoaded = false;
+    static bool fallingPlatLoaded = false;
     
     // Variables needed for gameplay (moved outside switch statements)
     float maxFallDistance = 500.0f; // Maximum distance player can fall below camera
@@ -808,8 +935,8 @@ int main() {
                     PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
-                        case EASY: mapFile = "map.tmx"; break;
-                        case NORMAL: mapFile = "map.tmx"; break; // You can create a medium difficulty map
+                        case EASY: mapFile = "easy.tmx"; break;
+                        case NORMAL: mapFile = "normal.tmx"; break; // You can create a medium difficulty map
                         case HARD: mapFile = "hard.tmx"; break;
                     }
                 }
@@ -819,8 +946,8 @@ int main() {
                     PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
-                        case EASY: mapFile = "map.tmx"; break;
-                        case NORMAL: mapFile = "map.tmx"; break; // You can create a medium difficulty map
+                        case EASY: mapFile = "easy.tmx"; break;
+                        case NORMAL: mapFile = "normal.tmx"; break; // You can create a medium difficulty map
                         case HARD: mapFile = "hard.tmx"; break;
                     }
                 }
@@ -875,8 +1002,10 @@ int main() {
                     AnimateTMX(map);
                     movePlayer(&player);
                     applyGravity(&(player.vel));
+                    
                     moveRectByVel(&(player.rect), &(player.vel));
                     checkTileCollisions(map, &player);
+                    checkSpikeCol(&player, &deathTransition);
                     update_animation(&(player.animations[player.state]));
                     cameraFollow(&camera, &player);
                     spawnOrb(map, camera, orbs);
@@ -884,6 +1013,7 @@ int main() {
 
                     // Update killbox position to be at the bottom of the visible screen
                     killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
+                    killbox.x = camera.target.x - (W / 2.0f);
                     checkKillboxCollision(&player, killbox, &deathTransition);
                     
                     // Check horizontal boundaries
@@ -914,16 +1044,18 @@ int main() {
                 // Handle game over inputs
                 if (IsKeyPressed(KEY_ENTER)) {
                     // Play game start sound
+                    
                     PlaySound(gameStartSound);
                     
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
+                    spawnOrb(map, camera, orbs);
                     // Reset camera follow system
                     ResetCameraFollow();
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
                     orbs.clear();
-                    spikesLoaded = false;
+                    
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
@@ -951,6 +1083,10 @@ int main() {
             case GAMEPLAY:
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
+                DrawSpikes(); 
+                drawFallingPlat();
+                
+                
                 
                 // Only draw killbox if not in death transition
                 if (!deathTransition.active) {
@@ -963,8 +1099,12 @@ int main() {
                     LoadSpikesFromTMX(map, &player);
                     spikesLoaded = true; // Ensure spikes are only loaded once
                 }
-                UpdateSpikes();
-                DrawSpikes(); 
+                if (!fallingPlatLoaded){
+                    LoadFallingPlat(map, &player);
+                }
+                UpdateSpikes(&player);
+                updateFallingPlat();
+                
                 EndMode2D();
                 drawScore(player.score);
                 drawHealth(player.health);
@@ -986,6 +1126,7 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
+    
 
     // Unload all game sounds
     UnloadGameSounds();
