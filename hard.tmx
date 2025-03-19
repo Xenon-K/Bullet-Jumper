@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="20" height="30" tilewidth="64" tileheight="64" infinite="0" nextlayerid="6" nextobjectid="23">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="20" height="30" tilewidth="64" tileheight="64" infinite="0" nextlayerid="6" nextobjectid="83">
  <tileset firstgid="1" source="floor.tsx"/>
  <imagelayer id="2" name="Image Layer 1" repeatx="1" repeaty="1">
   <image source="assets/backgrounds/Large 1024x1024/Green Nebula/Green_Nebula_08-1024x1024.png" width="1024" height="1024"/>
@@ -9,26 +9,26 @@
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,38,0,0,0,0,0,38,38,0,0,0,0,0,38,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,38,0,0,0,38,0,0,0,0,0,0,0,0,38,0,0,0,38,0,
+0,0,0,0,0,0,0,0,0,38,38,0,0,0,0,0,0,0,0,0,
+0,0,0,38,0,0,0,0,0,0,0,0,0,0,0,0,38,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+38,38,38,38,38,38,38,38,38,0,0,38,38,38,38,38,38,38,38,38,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,38,38,38,38,38,38,38,38,38,38,0,0,0,0,0,
+38,38,38,0,0,0,0,0,0,0,0,0,0,0,0,0,0,38,38,38,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,38,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,38,0,0,0,0,0,38,0,0,0,0,38,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,38,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,38,0,0,0,0,0,0,0,0,38,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,38,0,0,0,0,0,0,0,38,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,38,38,0,0,0,0,0,0,0,0,0,
 0,38,38,38,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -38,22 +38,75 @@
 38,38,38,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 </data>
  </layer>
- <objectgroup id="3" name="spikes"/>
  <objectgroup id="4" name="collisions">
   <object id="1" x="1" y="1855" width="192" height="66"/>
-  <object id="3" x="511.5" y="1793" width="65" height="66"/>
-  <object id="5" x="897.5" y="1793" width="65" height="66"/>
+  <object id="3" x="512" y="1792" width="63.0303" height="64"/>
+  <object id="5" x="895" y="1791.5" width="65" height="66"/>
   <object id="10" x="1088" y="1661" width="192" height="66"/>
-  <object id="11" x="62" y="1475" width="192" height="66"/>
-  <object id="21" x="384.833" y="1279" width="65" height="66"/>
-  <object id="22" x="892.833" y="1277.67" width="65" height="66"/>
+  <object id="11" x="64" y="1472.33" width="192" height="66"/>
+  <object id="21" x="192" y="1152" width="65" height="66"/>
+  <object id="22" x="895.833" y="1280.17" width="65" height="66"/>
+  <object id="30" x="900.25" y="1284.25" width="55.5" height="17.5"/>
+  <object id="35" x="320" y="1280" width="65" height="66"/>
+  <object id="36" x="64" y="1024" width="65" height="66"/>
+  <object id="37" x="256" y="896" width="65" height="66"/>
+  <object id="38" x="0" y="768" width="192" height="66"/>
+  <object id="39" x="1088" y="768" width="192" height="66"/>
+  <object id="40" x="575.5" y="1408.76" width="129.5" height="64.4769"/>
+  <object id="47" x="448" y="1024" width="65" height="66"/>
+  <object id="48" x="768" y="1024" width="65" height="66"/>
+  <object id="56" x="0" y="576" width="576" height="66"/>
+  <object id="57" x="320" y="704" width="640" height="66"/>
+  <object id="58" x="702.667" y="577.667" width="576" height="66"/>
+  <object id="59" x="1024" y="448" width="65" height="66"/>
+  <object id="60" x="1152" y="320" width="65" height="66"/>
+  <object id="61" x="1024" y="192" width="65" height="66"/>
+  <object id="62" x="896" y="320" width="65" height="66"/>
+  <object id="63" x="320" y="320" width="65" height="66"/>
+  <object id="64" x="192" y="192" width="65" height="66"/>
+  <object id="65" x="64" y="320" width="65" height="66"/>
+  <object id="66" x="192" y="448" width="65" height="66"/>
+  <object id="67" x="576" y="192" width="127.667" height="66"/>
+  <object id="68" x="576.833" y="383.667" width="126.333" height="66"/>
  </objectgroup>
- <objectgroup id="5" name="fallingPlat">
-  <object id="12" x="512" y="1536" width="66" height="18"/>
+ <objectgroup id="3" name="spikes">
+  <object id="23" x="516" y="1797" width="55.5" height="17.5"/>
+  <object id="25" x="899.25" y="1795.75" width="55.5" height="17.5"/>
+  <object id="26" x="1091.75" y="1666.25" width="55.5" height="17.5"/>
+  <object id="28" x="196.917" y="1476.58" width="55.5" height="17.5"/>
+  <object id="29" x="581.417" y="1414.58" width="55.5" height="17.5"/>
+  <object id="43" x="261.25" y="901.25" width="55.5" height="17.5"/>
+  <object id="44" x="198.25" y="1158.25" width="55.5" height="17.5"/>
+  <object id="45" x="68.25" y="774.25" width="55.5" height="17.5"/>
+  <object id="46" x="1156.25" y="774.25" width="55.5" height="17.5"/>
+  <object id="52" x="837.167" y="709.833" width="55.5" height="17.5"/>
+  <object id="53" x="387.583" y="707.25" width="55.5" height="17.5"/>
+  <object id="54" x="518.083" y="706.583" width="55.5" height="17.5"/>
+  <object id="55" x="709.083" y="709.25" width="55.5" height="17.5"/>
+  <object id="71" x="1029.25" y="451.25" width="55.5" height="17.5"/>
+  <object id="72" x="1031.25" y="197.25" width="55.5" height="17.5"/>
+  <object id="73" x="610.25" y="387.25" width="55.5" height="17.5"/>
+  <object id="74" x="613.25" y="197.25" width="55.5" height="17.5"/>
+  <object id="75" x="325.25" y="324.25" width="55.5" height="17.5"/>
+  <object id="76" x="68.25" y="324.25" width="55.5" height="17.5"/>
+  <object id="77" x="771.25" y="584.25" width="55.5" height="17.5"/>
+  <object id="78" x="900.25" y="582.25" width="55.5" height="17.5"/>
+  <object id="79" x="1157.25" y="582.25" width="55.5" height="17.5"/>
+  <object id="80" x="452.25" y="581.25" width="55.5" height="17.5"/>
+  <object id="81" x="322.25" y="580.25" width="55.5" height="17.5"/>
+  <object id="82" x="68.25" y="582.25" width="55.5" height="17.5"/>
+ </objectgroup>
+ <objectgroup id="5" name="fallingPlat" opacity="0.97">
+  <object id="12" x="449" y="1536" width="66" height="18"/>
   <object id="14" x="767" y="1541" width="66" height="18"/>
   <object id="15" x="-3" y="1669" width="66" height="18"/>
   <object id="18" x="701" y="1793" width="66" height="18"/>
   <object id="19" x="319" y="1795" width="66" height="18"/>
-  <object id="20" x="638.333" y="1281" width="66" height="18"/>
+  <object id="20" x="574.333" y="1261" width="66" height="18"/>
+  <object id="31" x="1024" y="1153" width="66" height="18"/>
+  <object id="32" x="1152" y="1024" width="66" height="18"/>
+  <object id="33" x="957.5" y="899" width="66" height="18"/>
+  <object id="42" x="959" y="1538" width="66" height="18"/>
+  <object id="70" x="642" y="1153" width="66" height="18"/>
  </objectgroup>
 </map>
