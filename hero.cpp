@@ -404,84 +404,24 @@ void drawScore(int score) {
 }
 
 void cameraFollow(Camera2D *camera, const Player *player) {
-    static bool initialized = false;
-    static float highestCameraY = 0.0f; // Store the highest Y position
+    
 
     if (std::isnan(player->rect.x) || std::isnan(player->rect.y)) {
         TraceLog(LOG_ERROR, "Player position is NaN! Resetting...");
         return;
     }
 
-    // Initialize the highestCameraY to the player's initial position
-    if (!initialized) {
-        highestCameraY = player->rect.y;
-        initialized = true;
-    }
-
-    // Update the highestCameraY only if the player moves higher
-    if (player->rect.y < highestCameraY) {
-        highestCameraY = player->rect.y;
-    }
-
-    camera->target.x = player->rect.x; // Always follow player in X
-    camera->target.y = highestCameraY; // Keep camera at the highest Y position
+    
+    // Follow player's X position
+    camera->target.x = player->rect.x;
+    camera->target.y = player->rect.y;  // Camera only moves up, never down
 }
 
 // Reset camera follow system
-void ResetCameraFollow() {
-    // This function resets the static variables in cameraFollow
-    static bool* initialized = nullptr;
-    static float* highestCameraY = nullptr;
-    
-    // Find the static variables by address
-    if (!initialized || !highestCameraY) {
-        // This is a hack to reset static variables
-        // We're using a dummy camera and player to call cameraFollow
-        // which will initialize the static variables
-        Camera2D dummyCamera = {};
-        Player dummyPlayer = {};
-        dummyPlayer.rect.x = 0;
-        dummyPlayer.rect.y = 1700;
-        cameraFollow(&dummyCamera, &dummyPlayer);
-        
-        // Now we need to find where these static variables are stored
-        // This is a bit of a hack, but it works for our purpose
-        initialized = new bool(false);
-        highestCameraY = new float(1700);
-    }
-    
-    // Reset the static variables
-    *initialized = false;
+void ResetCameraFollow(Camera2D* camera, Player* player) {
+    camera->target = {player->rect.x, player->rect.y};
 }
 
-void checkKillboxCollision(Player* player, const Rectangle& killbox, DeathTransition* transition) {
-    // Only check if we're not already in a death transition
-    if (!transition->active) {
-        // Check if player is below the killbox (completely fallen off the map)
-        if (player->rect.y > killbox.y + killbox.height) {
-            player->health = 0;
-            player->state = DEAD;
-            transition->active = true;
-            transition->alpha = 0.0f;
-            transition->timer = 0.0f;
-            // Play death sound
-            PlaySound(deathSound);
-            TraceLog(LOG_INFO, "Player fell off the map!");
-        }
-        
-        // Check if player is touching the killbox
-        if (CheckCollisionRecs(player->rect, killbox)) {
-            player->health = 0;
-            player->state = DEAD;
-            transition->active = true;
-            transition->alpha = 0.0f;
-            transition->timer = 0.0f;
-            // Play death sound
-            PlaySound(deathSound);
-            TraceLog(LOG_INFO, "Player touched the killbox!");
-        }
-    }
-}
 
 // Check if player is outside horizontal map boundaries
 void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* transition) {
@@ -978,7 +918,7 @@ int main() {
                     // Reset player and game state
                     ResetPlayer(&player, mapFile);
                     // Reset camera follow system
-                    ResetCameraFollow();
+                    ResetCameraFollow(&camera, &player);
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
                     orbs.clear();
@@ -1007,14 +947,12 @@ int main() {
                     checkTileCollisions(map, &player);
                     checkSpikeCol(&player, &deathTransition);
                     update_animation(&(player.animations[player.state]));
+                    
                     cameraFollow(&camera, &player);
+                    
                     spawnOrb(map, camera, orbs);
                     checkOrbCollection(&player, orbs);
 
-                    // Update killbox position to be at the bottom of the visible screen
-                    killbox.y = camera.target.y + (H / 2.0f) / camera.zoom - 50;
-                    killbox.x = camera.target.x - (W / 2.0f);
-                    checkKillboxCollision(&player, killbox, &deathTransition);
                     
                     // Check horizontal boundaries
                     checkHorizontalBoundaries(&player, map, &deathTransition);
@@ -1049,9 +987,10 @@ int main() {
                     
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
-                    spawnOrb(map, camera, orbs);
+                    //spawnOrb(map, camera, orbs);
                     // Reset camera follow system
-                    ResetCameraFollow();
+                    
+                    ResetCameraFollow(&camera, &player);
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
                     orbs.clear();
@@ -1088,10 +1027,8 @@ int main() {
                 
                 
                 
-                // Only draw killbox if not in death transition
-                if (!deathTransition.active) {
-                    DrawRectangleRec(killbox, killboxColor);
-                }
+               
+                
                 
                 drawPlayer(&player);
                 drawOrbs(orbs);
