@@ -144,7 +144,7 @@ struct fallingPlat{
 std::vector<Spike> spikes;
 std::vector<fallingPlat> falling_Plat;
 std::vector<Rectangle> platforms;
-std::vector<Score_Orb> orbs;
+static std::unordered_set<TmxObject*> spawnedPlatforms;
 
 // Add these new structures and variables
 struct DeathTransition {
@@ -264,14 +264,14 @@ Color getOrbColor(float score) {
     return Color{ (unsigned char)r, (unsigned char)g, (unsigned char)b, 255 };
 }
 
-void spawnOrb(TmxMap* map, const Camera2D &camera) {
+void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs) {
     float viewX = camera.target.x - (W / 2.0f) / camera.zoom;
     float viewY = camera.target.y - (H / 2.0f) / camera.zoom;
     float viewW = W / camera.zoom;
     float viewH = H / camera.zoom;
     Rectangle viewRect = { viewX, viewY, viewW, viewH };
 
-    static std::unordered_set<TmxObject*> spawnedPlatforms;
+    
 
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
@@ -298,12 +298,12 @@ void spawnOrb(TmxMap* map, const Camera2D &camera) {
                         };
                         orbs.push_back(newOrb);
                         spawnedPlatforms.insert(&col);
-                        spawnedPlatforms.clear();
                     }
                 }
             }
         }
     }
+    
 }
 
 void checkOrbCollection(Player *player, std::vector<Score_Orb> &orbs) {
@@ -912,6 +912,8 @@ int main() {
     // Modify killbox to be more reliable
     // Make it thicker and position it at the bottom of the visible screen
     Rectangle killbox = {0, 0, (float)W, 100}; 
+
+    std::vector<Score_Orb> orbs;
     static bool spikesLoaded = false;
     static bool fallingPlatLoaded = false;
     static bool orbsSpawned = false;
@@ -1033,7 +1035,6 @@ int main() {
                     cameraFollow(&camera, &player);
                     
                     
-                    
                     checkOrbCollection(&player, orbs);
 
                     
@@ -1078,8 +1079,8 @@ int main() {
                     ResetCamera(&camera, &player);
                     resetFallingPlat();
                     orbs.clear();
-                
-                    spawnOrb(map, camera);
+                    spawnedPlatforms.clear();
+                    
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
@@ -1088,7 +1089,7 @@ int main() {
                     
                     // Start playing menu music again
                     PlayMusicStream(menuMusic);
-                    
+                    //UnloadTMX(map);
                     // Return to menu
                     gameState = MENU;
                 }
@@ -1111,9 +1112,9 @@ int main() {
                 drawFallingPlat(fallinText);
                 drawSolidPlat(floorText);
                 drawPlayer(&player);
-                if(!orbsSpawned){
-                    spawnOrb(map, camera);
-                    orbsSpawned = true;
+                if (!orbsSpawned){
+                    spawnOrb(map, camera, orbs);
+                    //orbsSpawned = true;
                 }
                 
                 drawOrbs(orbs);
@@ -1149,8 +1150,6 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
-    UnloadTexture(fallinText);
-    UnloadTexture(floorText);
     
 
     // Unload all game sounds
