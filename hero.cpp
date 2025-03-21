@@ -18,6 +18,8 @@ Sound menuSelectSound;
 Sound gameStartSound;
 Sound landSound;
 
+
+
 const int W = 720;
 const int H = 1280;
 const float MAX_GRAV = 300.0f;
@@ -132,13 +134,16 @@ struct Spike {
 
 struct fallingPlat{
     Rectangle rect;
+    Rectangle Pos;
     Vector2 vel;
     Texture2D text;
     bool isFalling;
-
+    float timer;
 };
+
 std::vector<Spike> spikes;
 std::vector<fallingPlat> falling_Plat;
+std::vector<Rectangle> platforms;
 
 // Add these new structures and variables
 struct DeathTransition {
@@ -330,7 +335,11 @@ void moveRectByVel(Rectangle *rect, const Vector2 *vel) {
     rect->x += vel->x * GetFrameTime();
     rect->y += vel->y * GetFrameTime();
 }
-
+void movePlatByVel(Rectangle *rect, const Vector2 *vel, bool falling) {
+    if (falling == true){
+        rect->y += vel->y * GetFrameTime();
+    }
+}
 void keepPlayerInScreen(Player *player) {
     if (player->rect.y > (H - player->rect.height)) {
         player->vel.y = 0.0f;
@@ -348,7 +357,7 @@ void checkTileCollisions(TmxMap *map, Player *player) {
             for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
                 TmxObject &col = objectGroup.objects[j];
                 Rectangle platform = { col.aabb.x, col.aabb.y, col.aabb.width, col.aabb.height };
-
+                platforms.push_back(platform);
                 if (CheckCollisionRecs(player->rect, platform)) {
                     TraceLog(LOG_DEBUG, "Collision detected!");
 
@@ -429,9 +438,11 @@ void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* tra
     if (!transition->active) {
         // Get map width from TMX
         float mapWidth = 0;
+        float mapHeight = 0;
         for (unsigned int i = 0; i < map->layersLength; i++) {
             if (map->layers[i].type == LAYER_TYPE_TILE_LAYER) {
                 mapWidth = map->layers[i].exact.tileLayer.width * map->tileWidth;
+                mapHeight = map->layers[i].exact.tileLayer.height * map->tileHeight;
                 break;
             }
         }
@@ -446,6 +457,16 @@ void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* tra
             // Play death sound
             PlaySound(deathSound);
             TraceLog(LOG_INFO, "Player went outside horizontal map boundaries!");
+        }
+        if (player->rect.y < -100 || player->rect.y > mapHeight + 100) {
+            player->health = 0;
+            player->state = DEAD;
+            transition->active = true;
+            transition->alpha = 0.0f;
+            transition->timer = 0.0f;
+            // Play death sound
+            PlaySound(deathSound);
+            TraceLog(LOG_INFO, "Player went outside vertical map boundaries!");
         }
     }
 }
@@ -521,7 +542,7 @@ void UpdateSpikes(Player *player) {
 
         // Constants for timing
         const float MOVE_DURATION = 1.0f;  // 1 second to move fully
-        const float PAUSE_DURATION = 0.5f; // Pause time before switching
+        const float PAUSE_DURATION = 1.0f; // Pause time before switching
         const float MOVE_DISTANCE = 20.0f; // Pixels to move up or down
         
        
@@ -538,7 +559,7 @@ void UpdateSpikes(Player *player) {
 
             // Check if movement is complete
             if (spikes[i].timer <= 0) {
-                spikes[i].timer = PAUSE_DURATION + (GetRandomValue(0, 100) / 200.0f); // Add a small random pause
+                spikes[i].timer = PAUSE_DURATION + (GetRandomValue(0, 200) / 200.0f); // Add a small random pause
                 spikes[i].moving = false; // Enter pause state
             }
         } else {
@@ -552,10 +573,96 @@ void UpdateSpikes(Player *player) {
     }
 }
 
+
+
+void LoadFallingPlat(TmxMap* map){
+        for (unsigned int i = 0; i < map->layersLength; i++) {
+            if (strcmp(map->layers[i].name, "fallingPlat") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
+                TmxObjectGroup& objectGroup = map->layers[i].exact.objectGroup;
+                // Loop through all objects in the object group (spikes)
+                for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
+                    TmxObject& obj = objectGroup.objects[j];
+                    
+                    
+                    // Create a new plat object
+                    fallingPlat platform;
+                    platform.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
+                    platform.Pos = platform.rect;
+                    platform.isFalling = false;
+                    const float PAUSE_DURATION = 0.5f;
+                    platform.timer = PAUSE_DURATION;
+                    
+                    falling_Plat.push_back(platform);
+                }
+        }
+    }
+}
+
+
+void resetFallingPlat() {
+    for (size_t i = 0; i < falling_Plat.size(); i++){
+        falling_Plat[i].isFalling = false;
+        falling_Plat[i].rect = falling_Plat[i].Pos;
+        falling_Plat[i].timer = 0.5f;
+    }
+}
+
+
+void updateFallingPlat(Player *player){
+    for (size_t i = 0; i < falling_Plat.size(); i++){
+        
+        if (CheckCollisionRecs(player->rect, falling_Plat[i].rect)) {
+            TraceLog(LOG_DEBUG, "Collision detected!");
+
+            // Compute previous position
+            float previousX = player->rect.x - player->vel.x * GetFrameTime();
+            float previousY = player->rect.y - player->vel.y * GetFrameTime();
+
+            // Determine collision direction
+            bool comingFromTop = previousY + player->rect.height <= falling_Plat[i].rect.y;
+            bool comingFromBottom = previousY >= falling_Plat[i].rect.y + falling_Plat[i].rect.height;
+            bool comingFromLeft = previousX + player->rect.width <= falling_Plat[i].rect.x;
+            bool comingFromRight = previousX >= falling_Plat[i].rect.x + falling_Plat[i].rect.width;
+
+            if (comingFromTop) {
+                // Standing on platform
+                player->vel.y = 0.0f;
+                player->rect.y = falling_Plat[i].rect.y - player->rect.height;
+
+            
+                player->isJumping = false; // Allow jumping again
+
+                falling_Plat[i].timer -= GetFrameTime();
+                if (falling_Plat[i].timer <= 0){
+                    falling_Plat[i].isFalling = true;
+                }
+                // Play landing sound if player was jumping before
+                if (player->isJumping) {
+                    PlaySound(landSound);
+                }
+            } else if (comingFromBottom) {
+                // Hitting the bottom of the platform
+                player->vel.y = 0.0f;
+                player->rect.y = falling_Plat[i].rect.y + falling_Plat[i].rect.height;
+            } else if (comingFromLeft) {
+                // Hitting the left side
+                player->vel.x = 0.0f;
+                player->rect.x = falling_Plat[i].rect.x - player->rect.width;
+            } else if (comingFromRight) {
+                // Hitting the right side
+                player->vel.x = 0.0f;
+                player->rect.x = falling_Plat[i].rect.x + falling_Plat[i].rect.width;
+            }
+        
+        }
+
+    }
+}
+
 void DrawSpikes() {
     for (size_t i = 0; i < spikes.size(); i++) {
         // Draw the spike texture at the correct position
-        DrawRectangleRec(spikes[i].rect, RED);
+        //DrawRectangleRec(spikes[i].rect, RED);
         DrawTexturePro(
             spikes[i].texture,                 // Texture
             { 0, 0, (float)spikes[i].texture.width, (float)spikes[i].texture.height }, // Source Rectangle (Full texture)
@@ -567,74 +674,35 @@ void DrawSpikes() {
     }
 }
 
-void LoadFallingPlat(TmxMap* map, Player *player){
-    bool wasJumping = player->isJumping;
-    for (unsigned int i = 0; i < map->layersLength; i++) {
-        if (strcmp(map->layers[i].name, "fallingPlat") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
-            TmxObjectGroup& objectGroup = map->layers[i].exact.objectGroup;
-            // Loop through all objects in the object group (spikes)
-            for (unsigned int j = 0; j < objectGroup.objectsLength; j++) {
-                TmxObject& obj = objectGroup.objects[j];
-                
-                
-                // Create a new plat object
-                fallingPlat platform;
-                platform.rect = { obj.aabb.x, obj.aabb.y, obj.aabb.width, obj.aabb.height };
-                if (CheckCollisionRecs(player->rect, platform.rect)) {
-                    TraceLog(LOG_DEBUG, "Collision detected!");
-
-                    // Compute previous position
-                    float previousX = player->rect.x - player->vel.x * GetFrameTime();
-                    float previousY = player->rect.y - player->vel.y * GetFrameTime();
-
-                    // Determine collision direction
-                    bool comingFromTop = previousY + player->rect.height <= platform.rect.y;
-                    bool comingFromBottom = previousY >= platform.rect.y + platform.rect.height;
-                    bool comingFromLeft = previousX + player->rect.width <= platform.rect.x;
-                    bool comingFromRight = previousX >= platform.rect.x + platform.rect.width;
-
-                    if (comingFromTop) {
-                        // Standing on platform
-                        player->vel.y = 0.0f;
-                        player->rect.y = platform.rect.y - player->rect.height;
-                    
-                        player->isJumping = false; // Allow jumping again
-                        
-                        // Play landing sound if player was jumping before
-                        if (wasJumping) {
-                            PlaySound(landSound);
-                        }
-                    } else if (comingFromBottom) {
-                        // Hitting the bottom of the platform
-                        player->vel.y = 0.0f;
-                        player->rect.y = platform.rect.y + platform.rect.height;
-                    } else if (comingFromLeft) {
-                        // Hitting the left side
-                        player->vel.x = 0.0f;
-                        player->rect.x = platform.rect.x - player->rect.width;
-                    } else if (comingFromRight) {
-                        // Hitting the right side
-                        player->vel.x = 0.0f;
-                        player->rect.x = platform.rect.x + platform.rect.width;
-                    }
-                
-                }
-                falling_Plat.push_back(platform);
-        }
-    }
-}
-}
-void updateFallingPlat(){
-    for (size_t i = 0; i < falling_Plat.size(); i++){
-
-    }
-}
-
-void drawFallingPlat(){
+void drawFallingPlat(Texture2D text){
     for (size_t i = 0; i < falling_Plat.size(); i++) {
         // Draw the fallingplat texture at the correct position
-        DrawRectangleRec(falling_Plat[i].rect, RED);
+        //DrawRectangleRec(falling_Plat[i].rect, RED);
+        DrawTexturePro(
+            text,
+            {0,0, (float)text.width, (float)text.height},
+            falling_Plat[i].rect,
+            {0,0},
+            0,
+            WHITE
+        );
     }
+}
+
+void drawSolidPlat(Texture2D floor){
+    for (size_t i = 0; i < platforms.size(); i++) {
+        // Draw the fallingplat texture at the correct position
+        //DrawRectangleRec(platforms[i], RED);
+        DrawTexturePro(
+            floor,
+            {0,0, (float)floor.width*(platforms[i].width/64), (float)floor.height},
+            platforms[i],
+            {0,0},
+            0,
+            WHITE
+        );
+    }
+    
 }
 
 
@@ -803,7 +871,12 @@ int main() {
     TmxMap* map = nullptr;
     
     Texture2D hero = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png");
+    Texture2D floorText = LoadTexture("assets/tiles-and-background-foreground/floor.png");
+    Texture2D fallinText = LoadTexture("assets/tiles-and-background-foreground/falling.png");
 
+
+   
+    
     
 
     Player player = {
@@ -921,7 +994,10 @@ int main() {
                     ResetCameraFollow(&camera, &player);
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
-                    orbs.clear();
+
+                    //resetFallingPlat();
+
+                    
                     spikesLoaded = false;
                     gameState = GAMEPLAY;
                 }
@@ -942,6 +1018,11 @@ int main() {
                     AnimateTMX(map);
                     movePlayer(&player);
                     applyGravity(&(player.vel));
+
+                    for (size_t i = 0; i < falling_Plat.size(); i++){
+                        applyGravity(&falling_Plat[i].vel);
+                        movePlatByVel(&falling_Plat[i].rect, &falling_Plat[i].vel, falling_Plat[i].isFalling);
+                    }
                     
                     moveRectByVel(&(player.rect), &(player.vel));
                     checkTileCollisions(map, &player);
@@ -987,14 +1068,15 @@ int main() {
                     
                     // Restart game with same difficulty
                     ResetPlayer(&player, mapFile);
-                    //spawnOrb(map, camera, orbs);
+                    
                     // Reset camera follow system
                     
                     ResetCameraFollow(&camera, &player);
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
-                    orbs.clear();
-                    
+                    resetFallingPlat();
+                    //orbs.clear();
+                    spawnOrb(map, camera, orbs);
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
@@ -1023,13 +1105,8 @@ int main() {
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
                 DrawSpikes(); 
-                drawFallingPlat();
-                
-                
-                
-               
-                
-                
+                drawFallingPlat(fallinText);
+                drawSolidPlat(floorText);
                 drawPlayer(&player);
                 drawOrbs(orbs);
                 if (!spikesLoaded) {
@@ -1037,10 +1114,11 @@ int main() {
                     spikesLoaded = true; // Ensure spikes are only loaded once
                 }
                 if (!fallingPlatLoaded){
-                    LoadFallingPlat(map, &player);
+                    LoadFallingPlat(map);
+                    fallingPlatLoaded = true;
                 }
                 UpdateSpikes(&player);
-                updateFallingPlat();
+                updateFallingPlat(&player);
                 
                 EndMode2D();
                 drawScore(player.score);
