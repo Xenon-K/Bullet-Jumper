@@ -144,6 +144,7 @@ struct fallingPlat{
 std::vector<Spike> spikes;
 std::vector<fallingPlat> falling_Plat;
 std::vector<Rectangle> platforms;
+std::vector<Score_Orb> orbs;
 
 // Add these new structures and variables
 struct DeathTransition {
@@ -263,7 +264,7 @@ Color getOrbColor(float score) {
     return Color{ (unsigned char)r, (unsigned char)g, (unsigned char)b, 255 };
 }
 
-void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs) {
+void spawnOrb(TmxMap* map, const Camera2D &camera) {
     float viewX = camera.target.x - (W / 2.0f) / camera.zoom;
     float viewY = camera.target.y - (H / 2.0f) / camera.zoom;
     float viewW = W / camera.zoom;
@@ -297,6 +298,7 @@ void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs)
                         };
                         orbs.push_back(newOrb);
                         spawnedPlatforms.insert(&col);
+                        spawnedPlatforms.clear();
                     }
                 }
             }
@@ -910,10 +912,9 @@ int main() {
     // Modify killbox to be more reliable
     // Make it thicker and position it at the bottom of the visible screen
     Rectangle killbox = {0, 0, (float)W, 100}; 
-
-    std::vector<Score_Orb> orbs;
     static bool spikesLoaded = false;
     static bool fallingPlatLoaded = false;
+    static bool orbsSpawned = false;
     
     // Variables needed for gameplay (moved outside switch statements)
     float maxFallDistance = 500.0f; // Maximum distance player can fall below camera
@@ -1031,7 +1032,8 @@ int main() {
                     
                     cameraFollow(&camera, &player);
                     
-                    spawnOrb(map, camera, orbs);
+                    
+                    
                     checkOrbCollection(&player, orbs);
 
                     
@@ -1075,8 +1077,9 @@ int main() {
                     // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
                     resetFallingPlat();
-                    //orbs.clear();
-                    spawnOrb(map, camera, orbs);
+                    orbs.clear();
+                
+                    spawnOrb(map, camera);
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
@@ -1108,6 +1111,11 @@ int main() {
                 drawFallingPlat(fallinText);
                 drawSolidPlat(floorText);
                 drawPlayer(&player);
+                if(!orbsSpawned){
+                    spawnOrb(map, camera);
+                    orbsSpawned = true;
+                }
+                
                 drawOrbs(orbs);
                 if (!spikesLoaded) {
                     LoadSpikesFromTMX(map, &player);
@@ -1141,6 +1149,8 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
+    UnloadTexture(fallinText);
+    UnloadTexture(floorText);
     
 
     // Unload all game sounds
