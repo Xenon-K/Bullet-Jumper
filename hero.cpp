@@ -904,8 +904,6 @@ void drawSolidPlat(Texture2D floor){
     
 }
 
-
-
 // Draw the main menu
 void DrawMainMenu(int selectedOption, Difficulty difficulty) {
     const int titleFontSize = 60;
@@ -1073,8 +1071,7 @@ int main() {
     Texture2D floorText = LoadTexture("assets/tiles-and-background-foreground/floor.png");
     Texture2D fallinText = LoadTexture("assets/tiles-and-background-foreground/falling.png");
 
-    createEnemy();
-    spawnEnemy();
+    
 
     Player player = {
         .rect = {0, 1700, 64.0f, 64.0f},
@@ -1231,7 +1228,8 @@ int main() {
                     
                     cameraFollow(&camera, &player);
                     
-                    
+                    UpdateSpikes(&player);
+                    updateFallingPlat(&player);
                     checkOrbCollection(&player, orbs);
 
                     
@@ -1305,6 +1303,8 @@ int main() {
             case GAMEPLAY:
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
+                createEnemy();
+                spawnEnemy();
                 DrawSpikes(); 
                 drawFallingPlat(fallinText);
                 drawSolidPlat(floorText);
@@ -1323,8 +1323,7 @@ int main() {
                     LoadFallingPlat(map);
                     fallingPlatLoaded = true;
                 }
-                UpdateSpikes(&player);
-                updateFallingPlat(&player);
+                
                 
                 EndMode2D();
                 drawScore(player.score);
