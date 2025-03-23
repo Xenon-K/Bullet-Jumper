@@ -49,6 +49,8 @@
 		"format": "cpp",
 		"initializer_list": "cpp",
 		"iosfwd": "cpp",
+		"iostream": "cpp",
+		"istream": "cpp",
 		"limits": "cpp",
 		"new": "cpp",
 		"numbers": "cpp",
