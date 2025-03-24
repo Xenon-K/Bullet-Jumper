@@ -45,11 +45,13 @@ enum Difficulty {
     HARD
 };
 
+//Direction states
 enum Direction {
     LEFT = -1,
     RIGHT = 1,
 };
 
+//Player States
 enum CurrentState
 {
     DEAD = 0,
@@ -61,6 +63,7 @@ enum CurrentState
     HIT = 6
 };
 
+//Enemy States
 enum EnemyState
 {
     E_MOVING = 1,
@@ -68,13 +71,14 @@ enum EnemyState
     E_ATTACKING = 3
 };
 
-
+//Animation types
 enum AnimationType
 {
     REPEATING,
     ONESHOT
 };
 
+//Animation values
 struct Animation
 {
     int fst;
@@ -88,6 +92,7 @@ struct Animation
     AnimationType type;
 };
 
+//player values
 struct Player
 {
     Rectangle rect;
@@ -106,7 +111,7 @@ struct Player
     bool invulnerable;
 };
 
-
+//orb values
 struct Score_Orb {
     Rectangle rect;
     float score = 1;
@@ -114,6 +119,7 @@ struct Score_Orb {
     bool collected;
 };
 
+//Enemy values
 struct Enemy
 {
     Rectangle rect;
@@ -125,10 +131,7 @@ struct Enemy
     std::vector<Animation> animations;
 };
 
-std::vector <Enemy> enemies; // Store enemies in a vector
-
-
-
+//spike obstacle values
 struct Spike {
     Rectangle rect;   // Collision box
     bool active;      // Whether the spike is visible
@@ -140,6 +143,7 @@ struct Spike {
     Texture2D texture;    // Whether the spike is moving up
 };
 
+//falling platform values
 struct fallingPlat{
     Rectangle rect;
     Rectangle Pos;
@@ -149,12 +153,7 @@ struct fallingPlat{
     float timer;
 };
 
-std::vector<Spike> spikes;
-std::vector<fallingPlat> falling_Plat;
-std::vector<Rectangle> platforms;
-static std::unordered_set<TmxObject*> spawnedPlatforms;
-
-// Add these new structures and variables
+//Death transition values
 struct DeathTransition {
     bool active;
     float alpha;
@@ -162,6 +161,11 @@ struct DeathTransition {
     const float duration = 1.0f; // 1 second transition
 };
 
+std::vector <Enemy> enemies; // Store enemies in a vector
+std::vector<Spike> spikes;
+std::vector<fallingPlat> falling_Plat;
+std::vector<Rectangle> platforms;
+static std::unordered_set<TmxObject*> spawnedPlatforms;
 
 double timer = GetTime();
 double finishTime = timer + 1.0;
@@ -301,7 +305,6 @@ void spawnOrb(TmxMap* map, const Camera2D &camera, std::vector<Score_Orb> &orbs)
     Rectangle viewRect = { viewX, viewY, viewW, viewH };
 
     
-
     for (unsigned int i = 0; i < map->layersLength; i++) {
         if (strcmp(map->layers[i].name, "collisions") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
             TmxObjectGroup &objectGroup = map->layers[i].exact.objectGroup;
@@ -367,18 +370,8 @@ void moveRectByVel(Rectangle *rect, const Vector2 *vel)
     rect->x += vel->x * GetFrameTime();
     rect->y += vel->y * GetFrameTime();
 }
-void movePlatByVel(Rectangle *rect, const Vector2 *vel, bool falling) {
-    if (falling == true){
-        rect->y += vel->y * GetFrameTime();
-    }
-}
-void keepPlayerInScreen(Player *player) {
-    if (player->rect.y > (H - player->rect.height)) {
-        player->vel.y = 0.0f;
-        player->rect.y = (H - player->rect.height);
-        player->isJumping = false; // Allow jumping again
-    }
-}
+
+
 
 void checkTileCollisions(TmxMap *map, Player *player) {
     bool wasJumping = player->isJumping;
@@ -432,33 +425,6 @@ void checkTileCollisions(TmxMap *map, Player *player) {
     }
 }
 
-
-void drawScore(int score) {
-    // Draw score under health
-    std::string scoreText = "Score: " + std::to_string(score);
-    DrawText(scoreText.c_str(), 10, H - 60, 20, WHITE);
-}
-
-// Draw enemy
-void drawEnemy()
-{
-    for(size_t i = 0; i < enemies.size(); i++){
-        if (enemies[i].e_state < 0 || enemies[i].e_state >= static_cast<int>(enemies[i].animations.size()))
-        {
-            TraceLog(LOG_ERROR, "Invalid animation state: %d", enemies[i].e_state);
-            return;
-        }
-
-        Rectangle source = animation_frame(&(enemies[i].animations[enemies[i].e_state]));
-        source.width = source.width * static_cast<float>(enemies[i].dir);
-        
-        DrawTexturePro(enemies[i].sprite, source, enemies[i].rect, {0, 0}, 0.0f, WHITE);
-        //DrawRectangleRec(enemies[i].hitbox, RED);
-    }
-}
-
-
-
 // Spawn Enemy either on the left or right side of the screen to which they will move to the opposite side
 void spawnEnemy(Camera2D camera, Texture2D enemyTexture)
 {   
@@ -496,18 +462,6 @@ void spawnEnemy(Camera2D camera, Texture2D enemyTexture)
 
     enemies.push_back(enemy);
 }
-
-// Spawn Bullet at enemy position firing towards the enemy direction
-// void spawnBullet(const Enemy *enemy)
-// {
-//     //Projectile *bullet = new Projectile();
-//     bullet->bullet.x = enemy->rect.x + enemy->rect.width / 2;
-//     bullet->bullet.y = enemy->rect.y;
-//     bullet->isActivate = true;
-//     bullet->dir = enemy->dir;
-//     bullet->vel.x = 600.0f * bullet->dir;
-//     bullet->vel.y = 0.0f;
-// }
 
 // Move enemy
 void moveEnemy(TmxMap *map) {
@@ -550,17 +504,6 @@ void moveEnemy(TmxMap *map) {
         i++;  // Increment only if no enemy was removed
     }
 }
-
-// Draw bullet
-// void drawBullet(const Projectile *bullet)
-// {
-//     if (bullet->isActivate)
-//     {
-//         Rectangle source = animation_frame(&(bullet->animations[bullet->state]));
-//         source.width = source.width * static_cast<float>(bullet->dir);
-//         DrawTexturePro(bullet->sprite, source, bullet->bullet, {0, 0}, 0.0f, WHITE);
-//     }
-// }
 
 void enableInvulnerability(Player *player)
 {
@@ -611,18 +554,6 @@ void hitCheck(Player *player, DeathTransition *transition)
     }
 }
 
-void drawHealth(int health)
-{
-    // Draw health in the bottom-left corner
-    std::string healthText = "HP: " + std::to_string(health);
-    DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
-}
-
-void drawScoreGoal(int scoreGoal){
-    std::string healthText = "GOAL: " + std::to_string(scoreGoal);
-    DrawText(healthText.c_str(), 10, H - 90, 20, WHITE);
-}
-
 void cameraFollow(Camera2D *camera, const Player *player)
 {
     if (std::isnan(player->rect.x) || std::isnan(player->rect.y))
@@ -641,7 +572,6 @@ void cameraFollow(Camera2D *camera, const Player *player)
 void ResetCameraFollow(Camera2D* camera, Player* player) {
     camera->target = {player->rect.x, player->rect.y};
 }
-
 
 // Check if player is outside horizontal map boundaries
 void checkHorizontalBoundaries(Player* player, TmxMap* map, DeathTransition* transition) {
@@ -696,14 +626,6 @@ bool updateDeathTransition(DeathTransition* transition) {
         }
     }
     return false;
-}
-
-// Draw death transition effect
-void drawDeathTransition(DeathTransition* transition) {
-    if (transition->active) {
-        // Draw a black rectangle that fades in
-        DrawRectangle(0, 0, W, H, ColorAlpha(BLACK, transition->alpha));
-    }
 }
 
 void LoadSpikesFromTMX(TmxMap* map, Player *player){
@@ -785,8 +707,6 @@ void UpdateSpikes(Player *player) {
     }
 }
 
-
-
 void LoadFallingPlat(TmxMap* map){
         for (unsigned int i = 0; i < map->layersLength; i++) {
             if (strcmp(map->layers[i].name, "fallingPlat") == 0 && map->layers[i].type == LAYER_TYPE_OBJECT_GROUP) {
@@ -810,7 +730,6 @@ void LoadFallingPlat(TmxMap* map){
     }
 }
 
-
 void resetFallingPlat() {
     for (size_t i = 0; i < falling_Plat.size(); i++){
         falling_Plat[i].isFalling = false;
@@ -819,6 +738,11 @@ void resetFallingPlat() {
     }
 }
 
+void movePlatByVel(Rectangle *rect, const Vector2 *vel, bool falling) {
+    if (falling == true){
+        rect->y += vel->y * GetFrameTime();
+    }
+}
 
 void updateFallingPlat(Player *player){
     for (size_t i = 0; i < falling_Plat.size(); i++){
@@ -869,6 +793,49 @@ void updateFallingPlat(Player *player){
         }
 
     }
+}
+// Draw death transition effect
+void drawDeathTransition(DeathTransition* transition) {
+    if (transition->active) {
+        // Draw a black rectangle that fades in
+        DrawRectangle(0, 0, W, H, ColorAlpha(BLACK, transition->alpha));
+    }
+}
+
+void drawScore(int score) {
+    // Draw score under health
+    std::string scoreText = "Score: " + std::to_string(score);
+    DrawText(scoreText.c_str(), 10, H - 60, 20, WHITE);
+}
+
+// Draw enemy
+void drawEnemy()
+{
+    for(size_t i = 0; i < enemies.size(); i++){
+        if (enemies[i].e_state < 0 || enemies[i].e_state >= static_cast<int>(enemies[i].animations.size()))
+        {
+            TraceLog(LOG_ERROR, "Invalid animation state: %d", enemies[i].e_state);
+            return;
+        }
+
+        Rectangle source = animation_frame(&(enemies[i].animations[enemies[i].e_state]));
+        source.width = source.width * static_cast<float>(enemies[i].dir);
+        
+        DrawTexturePro(enemies[i].sprite, source, enemies[i].rect, {0, 0}, 0.0f, WHITE);
+        //DrawRectangleRec(enemies[i].hitbox, RED);
+    }
+}
+
+void drawHealth(int health)
+{
+    // Draw health in the bottom-left corner
+    std::string healthText = "HP: " + std::to_string(health);
+    DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
+}
+
+void drawScoreGoal(int scoreGoal){
+    std::string healthText = "GOAL: " + std::to_string(scoreGoal);
+    DrawText(healthText.c_str(), 10, H - 90, 20, WHITE);
 }
 
 void DrawSpikes() {
@@ -924,7 +891,7 @@ void DrawMainMenu(int selectedOption, Difficulty difficulty) {
     const int optionSpacing = 60;
     
     // Draw title
-    const char* title = "BULLET JUMPER";
+    const char* title = "EVADER";
     int titleWidth = MeasureText(title, titleFontSize);
     DrawText(title, W/2 - titleWidth/2, H/4, titleFontSize, GOLD);
     
@@ -1067,7 +1034,6 @@ void LoadGameSounds() {
     TraceLog(LOG_INFO, "Loaded win sound");
     SetSoundVolume(spiked, 2.0f); // Full volume
 
-    
     // Load music
     menuMusic = LoadMusicStream("assets/sfx/level-music.wav");
     TraceLog(LOG_INFO, "Loaded menu music");
@@ -1088,8 +1054,10 @@ void UnloadGameSounds() {
     // Unload music
     UnloadMusicStream(menuMusic);
 }
+
 float enemySpawnTimer = 0.0f;
 float enemySpawnInterval = 2.0f; // Start with a 2-second interval
+
 int main() {
     InitWindow(W, H, "Bullet Jumper");
     SetTargetFPS(60);
@@ -1503,7 +1471,9 @@ int main() {
         UnloadTMX(map);
     }
     UnloadTexture(hero);
-    
+    UnloadTexture(fallinText);
+    UnloadTexture(floorText);
+    UnloadTexture(enemyText);
 
     // Unload all game sounds
     UnloadGameSounds();
