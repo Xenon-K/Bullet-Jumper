@@ -17,6 +17,9 @@ Sound deathSound;
 Sound menuSelectSound;
 Sound gameStartSound;
 Sound landSound;
+Sound hitSound;
+Sound spiked;
+Sound winner;
 
 
 
@@ -31,7 +34,8 @@ const float JUMP_BOOST = -350.0f;
 enum GameState {
     MENU,
     GAMEPLAY,
-    GAME_OVER
+    GAME_OVER,
+    WIN_SCREEN
 };
 
 // Difficulty levels
@@ -54,6 +58,7 @@ enum CurrentState
     ROLLING = 3,
     JUMPING = 4,
     FALLING = 5,
+    HIT = 6
 };
 
 enum EnemyState
@@ -88,6 +93,8 @@ struct Player
     Rectangle rect;
     Rectangle hitbox;
     Vector2 vel;
+    Vector2 knockbackVel;  // Knockback velocity
+    float knockbackTime;   // Duration of knockback
     Texture2D sprite;
     Direction dir;
     CurrentState state;
@@ -99,6 +106,7 @@ struct Player
     bool invulnerable;
 };
 
+
 struct Score_Orb {
     Rectangle rect;
     float score = 1;
@@ -109,6 +117,7 @@ struct Score_Orb {
 struct Enemy
 {
     Rectangle rect;
+    Rectangle hitbox;
     Vector2 vel;
     Texture2D sprite;
     Direction dir;
@@ -118,35 +127,7 @@ struct Enemy
 
 std::vector <Enemy> enemies; // Store enemies in a vector
 
-class Projectile
-{
 
-public:
-    Rectangle bullet;
-    Vector2 vel;
-    Texture2D sprite;
-    Direction dir;
-    CurrentState state;
-    std::vector<Animation> animations;
-    bool isActivate;
-
-    Projectile() : bullet{0, 0, 16.0f, 16.0f}, vel{0.0f, 0.0f}, sprite{}, dir(RIGHT), state(IDLE), isActivate(false) {}
-
-    ~Projectile() {}
-
-    void bulletHitCheck(const Enemy *enemy, Player *player)
-    {
-        if (CheckCollisionRecs(player->rect, bullet))
-        {
-            if (!player->invulnerable)
-            {
-                player->health -= 1;
-            }
-            player->invulnerable = true;
-            isActivate = false; // Deactivate bullet after hit
-        }
-    }
-};
 
 struct Spike {
     Rectangle rect;   // Collision box
@@ -225,8 +206,8 @@ void drawPlayer(const Player *player)
     Rectangle source = animation_frame(&(player->animations[player->state]));
     source.width = source.width * static_cast<float>(player->dir);
     
-    DrawRectangleRec(player->rect, GREEN);//Debug for player collision and spritebox
-    DrawRectangleRec(player->hitbox, RED);//Debug for Hitbox
+    //DrawRectangleRec(player->rect, GREEN);//Debug for player collision and spritebox
+    //DrawRectangleRec(player->hitbox, RED);//Debug for Hitbox
     DrawTexturePro(player->sprite, source, player->rect, {0, 0}, 0.0f, WHITE);
 }
 
@@ -235,7 +216,18 @@ void movePlayer(Player *player)
     player->vel.x = 0.0f;
     bool changedState = false;
 
-    // Movement left/right
+    // Handle knockback smoothly
+    if (player->knockbackTime > 0) {
+        player->rect.x += player->knockbackVel.x * GetFrameTime();
+        player->knockbackTime -= GetFrameTime();
+
+        if (player->knockbackTime <= 0) {
+            player->knockbackVel.x = 0;  // Stop knockback after time runs out
+        }
+        return;  // Prevent other movement while knockback is active
+    }
+
+    // Regular movement
     if (IsKeyDown(KEY_A)) {
         player->vel.x = -200.0f;
         player->dir = LEFT;
@@ -254,28 +246,26 @@ void movePlayer(Player *player)
 
     // Jump Logic
     if (IsKeyPressed(KEY_SPACE) && !player->isJumping) {
-        player->jumpTime = 0.0f;  // Start tracking jump time
+        player->jumpTime = 0.0f;
         player->vel.y = JUMP_FORCE;
         player->state = CurrentState::JUMPING;
         player->isJumping = true;
         changedState = true;
-        
-        // Play jump sound
         PlaySound(jumpSound);
     }
-  
+
     // Holding SPACE boosts jump height
     if (IsKeyDown(KEY_SPACE) && player->isJumping) {
-        player->jumpTime += GetFrameTime(); // Track hold duration
+        player->jumpTime += GetFrameTime();
         if (player->jumpTime < MAX_JUMP_HOLD) {
-            player->vel.y = JUMP_BOOST;  // Apply more force for higher jump
+            player->vel.y = JUMP_BOOST;
             changedState = true;
         }
     }
 
     // Stop boosting when SPACE is released
     if (IsKeyReleased(KEY_SPACE) && player->isJumping) {
-        player->jumpTime = MAX_JUMP_HOLD;  // Prevent further boosting
+        player->jumpTime = MAX_JUMP_HOLD;
         changedState = true;
     }
 
@@ -461,96 +451,116 @@ void drawEnemy()
 
         Rectangle source = animation_frame(&(enemies[i].animations[enemies[i].e_state]));
         source.width = source.width * static_cast<float>(enemies[i].dir);
+        
         DrawTexturePro(enemies[i].sprite, source, enemies[i].rect, {0, 0}, 0.0f, WHITE);
+        //DrawRectangleRec(enemies[i].hitbox, RED);
     }
 }
 
-void createEnemy(){
-    for(int i = 0; i < 4; i++ ){
-        Enemy enemy = {
-            .rect = {0, 0, 64.0f, 64.0f},
-            .vel = {0.0f, 0.0f},
-            .sprite = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png"),
-            .dir = RIGHT,
-            .e_state = EnemyState::E_MOVING,
-            .animations = {
-                {0, 7, 0, 0, 16, 16, 0.1f, 0.1f, ONESHOT},
-                {0, 5, 0, 1, 16, 16, 0.1f, 0.1f, REPEATING},
-                {0, 3, 0, 5, 16, 16, 0.1f, 0.1f, REPEATING},
-                {0, 2, 0, 9, 16, 16, 0.1f, 0.1f, REPEATING},
-                {0, 2, 0, 7, 16, 16, 0.1f, 0.1f, REPEATING},
-                {0, 2, 0, 6, 16, 16, 0.1f, 0.1f, REPEATING},
-                {0, 3, 0, 6, 32, 16, 0.15f, 0.15f , ONESHOT}
-            }
-        };
-        enemies.push_back(enemy);
-    }
-}
+
 
 // Spawn Enemy either on the left or right side of the screen to which they will move to the opposite side
-void spawnEnemy()
+void spawnEnemy(Camera2D camera, Texture2D enemyTexture)
 {   
-    for(size_t i = 0; i < enemies.size(); i++){
-        
-        int side = GetRandomValue(0, 1);
-        if (side == 0)
-        {
-            enemies[i].rect.x = 0;
-            enemies[i].dir = RIGHT;
+    Enemy enemy = {
+        .rect = {0, 0, 64.0f, 64.0f},
+        .hitbox = {0, 0, 48.0f, 48.0f},
+        .vel = {0.0f, 0.0f},
+        .sprite = enemyTexture,
+        .dir = (GetRandomValue(0, 1) == 0) ? LEFT : RIGHT,
+        .e_state = EnemyState::E_MOVING,
+        .animations = {
+            {0, 4, 0, 0, 48, 48, 0.1f, 0.1f, ONESHOT},
+            {0, 4, 0, 0, 48, 48, 0.1f, 0.1f, REPEATING},
         }
-        else
-        {
-            enemies[i].rect.x = W - enemies[i].rect.width;
-            enemies[i].dir = LEFT;
-        }
-        enemies[i].rect.y = GetRandomValue(0, H - enemies[i].rect.height);
-        enemies[i].e_state = EnemyState::E_MOVING;
+    };
+
+    // Get camera boundaries (view area)
+    float camX = camera.target.x - (W / 2.0f) / camera.zoom;
+    float camY = camera.target.y - (H / 2.0f) / camera.zoom;
+    float camW = W / camera.zoom;
+    float camH = H / camera.zoom;
+
+    // Randomly spawn left or right of the camera view
+    if (enemy.dir == RIGHT) {
+        enemy.rect.x = camX - 100;  // Spawn slightly off-screen left
+    } else {
+        enemy.rect.x = camX + camW + 100;  // Spawn slightly off-screen right
     }
+
+    // Spawn at a random height within the camera view
+    enemy.rect.y = GetRandomValue(camY, camY + camH - enemy.rect.height);
+
+    // Assign a random speed
+    enemy.vel.x = GetRandomValue(100, 300) * ((enemy.dir == RIGHT) ? 1 : -1);
+
+    enemies.push_back(enemy);
 }
 
 // Spawn Bullet at enemy position firing towards the enemy direction
-void spawnBullet(const Enemy *enemy)
-{
-    Projectile *bullet = new Projectile();
-    bullet->bullet.x = enemy->rect.x + enemy->rect.width / 2;
-    bullet->bullet.y = enemy->rect.y;
-    bullet->isActivate = true;
-    bullet->dir = enemy->dir;
-    bullet->vel.x = 600.0f * bullet->dir;
-    bullet->vel.y = 0.0f;
-}
+// void spawnBullet(const Enemy *enemy)
+// {
+//     //Projectile *bullet = new Projectile();
+//     bullet->bullet.x = enemy->rect.x + enemy->rect.width / 2;
+//     bullet->bullet.y = enemy->rect.y;
+//     bullet->isActivate = true;
+//     bullet->dir = enemy->dir;
+//     bullet->vel.x = 600.0f * bullet->dir;
+//     bullet->vel.y = 0.0f;
+// }
 
 // Move enemy
-void moveEnemy()
-{
-    for(size_t i = 0; i < enemies.size(); i++){
-        if (enemies[i].e_state == EnemyState::E_MOVING)
-        {
-            enemies[i].vel.x = 200.0f * enemies[i].dir;
-            enemies[i].vel.y = 0.0f;
+void moveEnemy(TmxMap *map) {
+    float mapWidth = 0;
+    float mapHeight = 0;
+
+    // Get map dimensions
+    for (unsigned int i = 0; i < map->layersLength; i++) {
+        if (map->layers[i].type == LAYER_TYPE_TILE_LAYER) {
+            mapWidth = map->layers[i].exact.tileLayer.width * map->tileWidth;
+            mapHeight = map->layers[i].exact.tileLayer.height * map->tileHeight;
+            break;
+        }
+    }
+
+    // Iterate through enemies and remove those that leave the map
+    for (size_t i = 0; i < enemies.size();) {
+        if (enemies[i].e_state == EnemyState::E_MOVING) {
+            // Move enemy
             moveRectByVel(&(enemies[i].rect), &(enemies[i].vel));
+
+            // Bounce off walls
+            
+
+            // **Check if the enemy is completely outside the map area**
+            float despawnMargin = 200.0f;  // Extra margin before despawning
+            if (enemies[i].rect.x < -despawnMargin || enemies[i].rect.x > mapWidth + despawnMargin ||
+                enemies[i].rect.y < -despawnMargin || enemies[i].rect.y > mapHeight + despawnMargin) {
+                
+                TraceLog(LOG_INFO, "Despawning enemy at (%.2f, %.2f)", enemies[i].rect.x, enemies[i].rect.y);
+                enemies.erase(enemies.begin() + i);  // Remove enemy
+                continue;  // Skip incrementing 'i' since an enemy was removed
+            }
         }
 
-        
-        // If enemy goes out of screen then spawn enemy again
-        if (enemies[i].rect.x > W || enemies[i].rect.x < 0)
-        {
-            spawnEnemy();
-        }
-        
+        // Update hitbox
+        enemies[i].hitbox.x = enemies[i].rect.x + 12;
+        enemies[i].hitbox.y = enemies[i].rect.y + 12;
+
+        i++;  // Increment only if no enemy was removed
     }
 }
 
 // Draw bullet
-void drawBullet(const Projectile *bullet)
-{
-    if (bullet->isActivate)
-    {
-        Rectangle source = animation_frame(&(bullet->animations[bullet->state]));
-        source.width = source.width * static_cast<float>(bullet->dir);
-        DrawTexturePro(bullet->sprite, source, bullet->bullet, {0, 0}, 0.0f, WHITE);
-    }
-}
+// void drawBullet(const Projectile *bullet)
+// {
+//     if (bullet->isActivate)
+//     {
+//         Rectangle source = animation_frame(&(bullet->animations[bullet->state]));
+//         source.width = source.width * static_cast<float>(bullet->dir);
+//         DrawTexturePro(bullet->sprite, source, bullet->bullet, {0, 0}, 0.0f, WHITE);
+//     }
+// }
 
 void enableInvulnerability(Player *player)
 {
@@ -564,43 +574,40 @@ void enableInvulnerability(Player *player)
 }
 
 // Checks Collisions between player and enemy and bullets
-void hitCheck(Projectile *bullet, Player *player)
+void hitCheck(Player *player, DeathTransition *transition)
 {
-    /*
-    // Check if bullet hits player
-    if (CheckCollisionRecs(player->rect, bullet->bullet))
-    {
-        if (!player->invulnerable)
-        {
-            player->health -= 1;
-            timer = GetTime();
-            finishTime = timer + 1.0;
-        }
-        enableInvulnerability(player);
-        bullet->isActivate = false;
-        bullet->bullet.x = enemy->rect.x;
-        bullet->bullet.y = enemy->rect.y;
-    }
-    */
-
-    for(size_t i = 0; i < enemies.size(); i++){
-    // If bullet hits player then player loses half health)
-        if (CheckCollisionRecs(player->rect, enemies[i].rect))
-        {
-            if (!player->invulnerable)
-            {
+    for(size_t i = 0; i < enemies.size(); i++) {
+        if (CheckCollisionRecs(player->hitbox, enemies[i].hitbox)) {
+            if (!player->invulnerable) {
                 player->health -= 5;
+                player->state = CurrentState::HIT;
+                
+                // Apply smooth knockback instead of teleporting
+                float knockbackForce = 300.0f;  // Adjust force as needed
+                if (player->dir == RIGHT) {
+                    player->knockbackVel.x = -knockbackForce;  // Push left
+                } else {
+                    player->knockbackVel.x = knockbackForce;   // Push right
+                }
+
+                player->knockbackTime = 0.3f;  // Knockback lasts 0.3 seconds
                 timer = GetTime();
                 finishTime = timer + 1.0;
+                // Play hit sound
+                PlaySound(hitSound);
             }
+            
             enableInvulnerability(player);
         }
+    }
 
-        // If player health is less than 0 then player is dead
-        if (player->health <= 0)
-        {
-            player->state = CurrentState::DEAD;
-        }
+    // If player's health reaches 0, start death transition
+    if (player->health <= 0) {
+        player->state = DEAD;
+        transition->active = true;
+        transition->alpha = 0.0f;
+        transition->timer = 0.0f;
+        TraceLog(LOG_INFO, "Player died from enemy hit!");
     }
 }
 
@@ -609,6 +616,11 @@ void drawHealth(int health)
     // Draw health in the bottom-left corner
     std::string healthText = "HP: " + std::to_string(health);
     DrawText(healthText.c_str(), 10, H - 30, 20, WHITE);
+}
+
+void drawScoreGoal(int scoreGoal){
+    std::string healthText = "GOAL: " + std::to_string(scoreGoal);
+    DrawText(healthText.c_str(), 10, H - 90, 20, WHITE);
 }
 
 void cameraFollow(Camera2D *camera, const Player *player)
@@ -728,7 +740,8 @@ void checkSpikeCol(Player* player, DeathTransition* transition){
             transition->alpha = 0.0f;
             transition->timer = 0.0f;
             // Play death sound
-            PlaySound(deathSound);
+            PlaySound(spiked);
+            //PlaySound(deathSound);
             TraceLog(LOG_INFO, "Player died to spikes!");
         }
     }
@@ -966,12 +979,38 @@ void DrawGameOver(int score) {
     DrawText(menuText, W/2 - menuWidth/2, H/2 + 150, textFontSize, YELLOW);
 }
 
+void DrawWinScreen(int score) {
+    const int titleFontSize = 60;
+    const int textFontSize = 30;
+    
+    // Draw "You Win" text
+    const char* winText = "YOU WIN!";
+    int winWidth = MeasureText(winText, titleFontSize);
+    DrawText(winText, W/2 - winWidth/2, H/3, titleFontSize, GOLD);
+
+    // Display final score
+    char scoreText[50];
+    sprintf(scoreText, "FINAL SCORE: %d", score);
+    int scoreWidth = MeasureText(scoreText, textFontSize);
+    DrawText(scoreText, W/2 - scoreWidth/2, H/2, textFontSize, WHITE);
+
+    // Show restart instructions
+    const char* restartText = "PRESS ENTER TO RESTART";
+    int restartWidth = MeasureText(restartText, textFontSize);
+    DrawText(restartText, W/2 - restartWidth/2, H/2 + 100, textFontSize, YELLOW);
+
+    const char* menuText = "PRESS M FOR MENU";
+    int menuWidth = MeasureText(menuText, textFontSize);
+    DrawText(menuText, W/2 - menuWidth/2, H/2 + 150, textFontSize, YELLOW);
+}
+
 // Reset player for a new game
 void ResetPlayer(Player* player, const char* mapFile) {
     // Set player to a safe starting position
     player->rect = {0, 1700, 64.0f, 64.0f};
     player->hitbox = {0, 1700, 32.0f, 64.0f};
     player->vel = {0.0f, 0.0f};
+    player->knockbackVel = {0.0f, 0.0f};
     player->dir = RIGHT;
     player->state = IDLE;
     player->isJumping = false;
@@ -1015,6 +1054,19 @@ void LoadGameSounds() {
     landSound = LoadSound("assets/sfx/land.wav");
     TraceLog(LOG_INFO, "Loaded land sound");
     SetSoundVolume(landSound, 1.0f); // Full volume
+
+    hitSound = LoadSound("assets/sfx/hurt.wav");
+    TraceLog(LOG_INFO, "Loaded Hit sound");
+    SetSoundVolume(hitSound, 1.0f); // Full volume
+
+    spiked = LoadSound("assets/sfx/spiked.wav");
+    TraceLog(LOG_INFO, "Loaded spiked sound");
+    SetSoundVolume(spiked, 2.0f); // Full volume
+
+    winner = LoadSound("assets/sfx/winner.wav");
+    TraceLog(LOG_INFO, "Loaded win sound");
+    SetSoundVolume(spiked, 2.0f); // Full volume
+
     
     // Load music
     menuMusic = LoadMusicStream("assets/sfx/level-music.wav");
@@ -1031,11 +1083,13 @@ void UnloadGameSounds() {
     UnloadSound(menuSelectSound);
     UnloadSound(gameStartSound);
     UnloadSound(landSound);
-    
+    UnloadSound(hitSound);
+    UnloadSound(spiked);
     // Unload music
     UnloadMusicStream(menuMusic);
 }
-
+float enemySpawnTimer = 0.0f;
+float enemySpawnInterval = 2.0f; // Start with a 2-second interval
 int main() {
     InitWindow(W, H, "Bullet Jumper");
     SetTargetFPS(60);
@@ -1070,8 +1124,7 @@ int main() {
     Texture2D hero = LoadTexture("assets/herochar-sprites/herochar_spritesheet.png");
     Texture2D floorText = LoadTexture("assets/tiles-and-background-foreground/floor.png");
     Texture2D fallinText = LoadTexture("assets/tiles-and-background-foreground/falling.png");
-
-    
+    Texture2D enemyText = LoadTexture("assets/herochar-sprites/fly-eye.png");
 
     Player player = {
         .rect = {0, 1700, 64.0f, 64.0f},
@@ -1086,7 +1139,7 @@ int main() {
             {0, 2, 0, 9, 16, 16, 0.1f, 0.1f, REPEATING},
             {0, 2, 0, 7, 16, 16, 0.1f, 0.1f, REPEATING},
             {0, 2, 0, 6, 16, 16, 0.1f, 0.1f, REPEATING},
-            {0, 3, 0, 6, 32, 16, 0.15f, 0.15f, ONESHOT},
+            {0, 3, 0, 8, 16, 16, 0.1f, 0.1f, REPEATING}
         },
         .isJumping = false,
         .jumpTime = 0.0f,
@@ -1094,7 +1147,6 @@ int main() {
         .score = 0,
     };
 
-    Projectile bullet;
 
     Camera2D camera = {
         .offset = {W / 2.0f, H / 2.0f},
@@ -1111,7 +1163,9 @@ int main() {
     static bool spikesLoaded = false;
     static bool fallingPlatLoaded = false;
     static bool orbsSpawned = false;
-    
+    static bool enemiesSpawned = false;
+    int scoreGoal = 10;  // Default score goal
+
     // Variables needed for gameplay (moved outside switch statements)
     float maxFallDistance = 500.0f; // Maximum distance player can fall below camera
     float bottomOfScreen = 0.0f;
@@ -1156,9 +1210,9 @@ int main() {
                     PlaySound(menuSelectSound);
                     // Update map file based on difficulty
                     switch(difficulty) {
-                        case EASY: mapFile = "easy.tmx"; break;
-                        case NORMAL: mapFile = "normal.tmx"; break; // You can create a medium difficulty map
-                        case HARD: mapFile = "hard.tmx"; break;
+                        case EASY: mapFile = "easy.tmx";  break;
+                        case NORMAL: mapFile = "normal.tmx";  break; // You can create a medium difficulty map
+                        case HARD: mapFile = "hard.tmx";  break;
                     }
                 }
                 
@@ -1171,31 +1225,47 @@ int main() {
                 if (IsKeyPressed(KEY_ENTER) && menuSelection == 0) {
                     // Play game start sound
                     PlaySound(gameStartSound);
-                    
+    
                     // Stop menu music
                     StopMusicStream(menuMusic);
                     
-                    // Load the map based on difficulty
+                    // Ensure the previous map is fully unloaded before loading a new one
                     if (map != nullptr) {
                         UnloadTMX(map);
+                        map = nullptr;
                     }
+                
+                    // Clear all game objects before loading a new map
+                    enemies.clear();
+                    spikes.clear();
+                    falling_Plat.clear();
+                    platforms.clear();
+                    orbs.clear();
+                    spawnedPlatforms.clear();
+
+                    switch (difficulty) {
+                        case EASY: scoreGoal = 8; break;
+                        case NORMAL: scoreGoal = 12; break;
+                        case HARD: scoreGoal = 25; break;
+                    }
+                    
+                    // Load the selected map
                     map = LoadTMX(mapFile);
                     if (map == nullptr) {
                         TraceLog(LOG_ERROR, "Couldn't load the map: %s", mapFile);
                         return EXIT_FAILURE;
                     }
-                    
+                
                     // Reset player and game state
                     ResetPlayer(&player, mapFile);
-                    // Reset camera follow system
                     ResetCameraFollow(&camera, &player);
-                    // Reset camera to follow the player at the new position
                     ResetCamera(&camera, &player);
-
-                    //resetFallingPlat();
-
-                    
+                
                     spikesLoaded = false;
+                    fallingPlatLoaded = false;
+                    orbsSpawned = false;
+                    enemiesSpawned = false;
+                
                     gameState = GAMEPLAY;
                 }
                 break;
@@ -1209,13 +1279,27 @@ int main() {
                         break;
                     }
                 }
+
+                if (player.score >= scoreGoal) {
+                    PlaySound(winner);
+                    gameState = WIN_SCREEN;
+                }
                 
                 // Only update gameplay if not in death transition
                 if (!deathTransition.active) {
                     AnimateTMX(map);
                     movePlayer(&player);
                     applyGravity(&(player.vel));
-
+                    enemySpawnTimer -= GetFrameTime();
+                    if (enemySpawnTimer <= 0 && enemies.size() < 20) {  // Increase limit if needed
+                        int numEnemies = GetRandomValue(1, 5);  // Spawn 1-3 enemies
+                        for (int i = 0; i < numEnemies; i++) {
+                            spawnEnemy(camera, enemyText);  // Use camera for positioning
+                        }
+                
+                        enemySpawnInterval = GetRandomValue(1, 2);
+                        enemySpawnTimer = enemySpawnInterval;
+                    }
                     for (size_t i = 0; i < falling_Plat.size(); i++){
                         applyGravity(&falling_Plat[i].vel);
                         movePlatByVel(&falling_Plat[i].rect, &falling_Plat[i].vel, falling_Plat[i].isFalling);
@@ -1225,7 +1309,11 @@ int main() {
                     checkTileCollisions(map, &player);
                     checkSpikeCol(&player, &deathTransition);
                     update_animation(&(player.animations[player.state]));
-                    
+                    for (size_t i = 0; i < enemies.size(); i++){
+                        update_animation(&(enemies[i].animations[enemies[i].e_state]));
+                    }
+                
+                    hitCheck(&player, &deathTransition);
                     cameraFollow(&camera, &player);
                     
                     UpdateSpikes(&player);
@@ -1264,18 +1352,36 @@ int main() {
                     
                     PlaySound(gameStartSound);
                     
-                    // Restart game with same difficulty
-                    ResetPlayer(&player, mapFile);
-                    
-                    // Reset camera follow system
-                    
-                    ResetCameraFollow(&camera, &player);
-                    // Reset camera to follow the player at the new position
-                    ResetCamera(&camera, &player);
-                    resetFallingPlat();
+                    if (map != nullptr) {
+                        UnloadTMX(map);
+                        map = nullptr;
+                    }
+                
+                    // Clear all objects before restarting
+                    enemies.clear();
+                    spikes.clear();
+                    falling_Plat.clear();
+                    platforms.clear();
                     orbs.clear();
                     spawnedPlatforms.clear();
+                
+                    // Load the same map again
+                    map = LoadTMX(mapFile);
+                    if (map == nullptr) {
+                        TraceLog(LOG_ERROR, "Couldn't load the map: %s", mapFile);
+                        return EXIT_FAILURE;
+                    }
+                
+                    // Reset player and camera
+                    ResetPlayer(&player, mapFile);
+                    ResetCameraFollow(&camera, &player);
+                    ResetCamera(&camera, &player);
                     
+                    spikesLoaded = false;
+                    fallingPlatLoaded = false;
+                    orbsSpawned = false;
+                    enemiesSpawned = false;
+                
                     gameState = GAMEPLAY;
                 }
                 else if (IsKeyPressed(KEY_M)) {
@@ -1284,8 +1390,52 @@ int main() {
                     
                     // Start playing menu music again
                     PlayMusicStream(menuMusic);
+
                     //UnloadTMX(map);
                     // Return to menu
+                    gameState = MENU;
+                }
+                break;
+
+            case WIN_SCREEN:
+                if (IsKeyPressed(KEY_ENTER)) {
+                    PlaySound(gameStartSound);
+
+                    if (map != nullptr) {
+                        UnloadTMX(map);
+                        map = nullptr;
+                    }
+
+                    // Clear game objects before restarting
+                    enemies.clear();
+                    spikes.clear();
+                    falling_Plat.clear();
+                    platforms.clear();
+                    orbs.clear();
+                    spawnedPlatforms.clear();
+
+                    // Reload the level
+                    map = LoadTMX(mapFile);
+                    if (map == nullptr) {
+                        TraceLog(LOG_ERROR, "Couldn't load the map: %s", mapFile);
+                        return EXIT_FAILURE;
+                    }
+
+                    // Reset player and camera
+                    ResetPlayer(&player, mapFile);
+                    ResetCameraFollow(&camera, &player);
+                    ResetCamera(&camera, &player);
+
+                    spikesLoaded = false;
+                    fallingPlatLoaded = false;
+                    orbsSpawned = false;
+                    enemiesSpawned = false;
+
+                    gameState = GAMEPLAY;
+                }
+                else if (IsKeyPressed(KEY_M)) {
+                    PlaySound(menuSelectSound);
+                    PlayMusicStream(menuMusic);
                     gameState = MENU;
                 }
                 break;
@@ -1303,12 +1453,13 @@ int main() {
             case GAMEPLAY:
                 BeginMode2D(camera);
                 DrawTMX(map, &camera, 0, 0, WHITE);
-                createEnemy();
-                spawnEnemy();
+                
+
                 DrawSpikes(); 
                 drawFallingPlat(fallinText);
                 drawSolidPlat(floorText);
                 drawPlayer(&player);
+
                 if (!orbsSpawned){
                     spawnOrb(map, camera, orbs);
                     //orbsSpawned = true;
@@ -1323,11 +1474,13 @@ int main() {
                     LoadFallingPlat(map);
                     fallingPlatLoaded = true;
                 }
+                drawEnemy();
                 
-                
+                moveEnemy(map);
                 EndMode2D();
                 drawScore(player.score);
                 drawHealth(player.health);
+                drawScoreGoal(scoreGoal);
                 
                 // Draw death transition effect on top of everything
                 drawDeathTransition(&deathTransition);
@@ -1335,6 +1488,10 @@ int main() {
                 
             case GAME_OVER:
                 DrawGameOver(player.score);
+                break;
+
+            case WIN_SCREEN:
+                DrawWinScreen(player.score);
                 break;
         }
         
